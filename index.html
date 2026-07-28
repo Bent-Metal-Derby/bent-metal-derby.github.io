@@ -241,13 +241,16 @@
   <div class="subtitle">Demolition Derby &amp; Race</div>
   <div class="card">
     <h3>How it works</h3>
-    Each round is a <b>random</b> arena: a <b>derby</b> (be the last car running), a <b>3-lap race</b>
-    on a jump-and-barrel track, or a <b>3-lap city circuit</b> with tight 90° corners, sidewalks you can
-    hop onto and solid buildings. Everyone races <i>and</i> rams.
+    Each round is a <b>random</b> arena: a <b>derby</b> (be the last car running), a <b>3-lap race</b> on a
+    jump-and-barrel circuit — sometimes a loose <b>dirt rally</b> where sideways slides bank drift points — or a
+    <b>3-lap city circuit</b> with tight 90° corners, sidewalks you can hop onto and solid buildings. Everyone
+    races <i>and</i> rams, and a tow truck hauls the wrecks away.
     <div style="height:12px"></div>
     <h3>Score by getting stuck in</h3>
     Every hit you land and every car you wreck is worth points. In races you bank a share of those points
     by your finish: <b>1st 100% · 2nd 50% · 3rd 25% · 4th+ nothing</b>. Surviving as the last car running banks the lot.
+    Grab the floating power-ups — <b>nitro</b>, <b>shield</b>, <b>2× damage</b> and <b>repair</b> — to swing a round your way,
+    then spend your winnings in the garage.
     <div style="height:14px"></div>
     <h3>Controls</h3>
     <div class="keys">
@@ -289,7 +292,7 @@
 <!-- GARAGE -->
 <div id="garageScreen" class="overlay hidden">
   <div class="title">GARAGE</div>
-  <div class="subtitle">Each ride has its own upgrade track</div>
+  <div class="subtitle">Every ride has its own set of upgrades</div>
   <div id="garageVehBtns" class="chips" style="margin:10px 0 4px"></div>
   <div class="cashBig">CASH&nbsp; <b id="garageCash">$0</b></div>
   <div class="garage" id="garageBody"></div>
@@ -314,7 +317,7 @@
 <!-- GENERATING LEVEL (covers the scene while the next arena is built) -->
 <div id="loadingScreen" class="overlay hidden">
   <div class="title">GENERATING LEVEL</div>
-  <div class="subtitle">Building the arena…</div>
+  <div class="subtitle">Building the level…</div>
   <div class="spinner"></div>
 </div>
 
@@ -522,12 +525,28 @@ const SKY = 0x9fc3e8, NIGHT_SKY = 0x04050b;
 const SUN_DIR=[0.60,0.22,-0.77], MOON_DIR=[-0.55,0.24,-0.80];   // low sun -> long sideways shadows; the light comes from this direction
 
 let MAX_ANISO=4;
+// ---- device quality tier ---------------------------------------------------
+// Desktop stays on the original settings (high). Phones/tablets (mobile UA, or a coarse pointer on a small
+// screen) drop the heaviest GPU levers — a 4096² shadow map and a 2× pixel ratio dominate the frame cost —
+// while keeping the game visually intact. Detection is deliberately conservative so no desktop is downgraded.
+const QUALITY = (()=>{
+  const coarse = !!(window.matchMedia && matchMedia('(pointer:coarse)').matches);
+  const scr = Math.min(screen.width||9999, screen.height||9999);
+  const mobileUA = /Android|webOS|iPhone|iPad|iPod|IEMobile|Opera Mini|Mobile/i.test(navigator.userAgent||'');
+  const low = mobileUA || (coarse && scr<=820);
+  return { low,
+    pixelCap:     low ? 1.5  : 2,       // fragment count scales with the square of this
+    shadowMap:    low ? 2048 : 4096,    // 2048² is a quarter of the texels/fill of 4096²
+    softShadow:   !low,                 // plain PCF (cheaper) instead of PCFSoft on mobile
+    maxParticles: low ? 320  : 540,
+    skidMarks:    low ? 160  : 280 };
+})();
 function initThree(){
   renderer = new THREE.WebGLRenderer({ antialias:true, powerPreference:"high-performance" });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, QUALITY.pixelCap));
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.shadowMap.type = QUALITY.softShadow ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
   renderer.outputEncoding = THREE.sRGBEncoding;
   renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.0;  // filmic: rolls off highlights (no washout)
   try{ MAX_ANISO = renderer.capabilities.getMaxAnisotropy()||4; }catch(e){ MAX_ANISO=4; }   // sharp textures at grazing angles — nearly free
@@ -549,7 +568,7 @@ function initThree(){
   groundMesh.rotation.x=-Math.PI/2; groundMesh.position.y=-0.5; groundMesh.receiveShadow=true; scene.add(groundMesh);  // clearly below the road so it never bleeds over it
 
   levelGroup = new THREE.Group(); scene.add(levelGroup);
-  skidMarks = new SkidMarks(280);
+  skidMarks = new SkidMarks(QUALITY.skidMarks);
   window.addEventListener('resize', onResize);
 }
 function onResize(){
@@ -562,7 +581,7 @@ function buildLights(){
   sunLight = new THREE.DirectionalLight(0xffffff, 1.0);
   sunLight.position.set(SUN_DIR[0]*SUN_FOLLOW_DIST, SUN_DIR[1]*SUN_FOLLOW_DIST, SUN_DIR[2]*SUN_FOLLOW_DIST); sunLight.castShadow = true;
   scene.add(sunLight.target);                        // target must be in the scene graph so the shadow camera tracks it
-  sunLight.shadow.mapSize.set(4096,4096);
+  sunLight.shadow.mapSize.set(QUALITY.shadowMap, QUALITY.shadowMap);
   const s=SUN_FRUSTUM;                               // tight frustum around the player -> ~2x finer texels than before
   sunLight.shadow.camera.left=-s; sunLight.shadow.camera.right=s; sunLight.shadow.camera.top=s; sunLight.shadow.camera.bottom=-s;
   sunLight.shadow.camera.near=1; sunLight.shadow.camera.far=SUN_FOLLOW_DIST*2;
@@ -645,7 +664,9 @@ function buildNightSky(){
 }
 function buildSun(){   // bright sun disc low in the daytime sky
   sunGroup=new THREE.Group(); scene.add(sunGroup);
-  const disc=new THREE.Mesh(new THREE.SphereGeometry(19,28,18), new THREE.MeshBasicMaterial({color:0xffffff,fog:false}));   // pure white disc
+  // toneMapped:false keeps it a true #FFFFFF — otherwise ACES tone-mapping rolls pure white down to grey and
+  // the disc ends up darker than its own additive corona. Opaque, no transparency.
+  const disc=new THREE.Mesh(new THREE.SphereGeometry(19,28,18), new THREE.MeshBasicMaterial({color:0xffffff,fog:false,toneMapped:false}));   // pure white disc
   disc.position.set(SUN_DIR[0]*430,SUN_DIR[1]*430,SUN_DIR[2]*430); disc.renderOrder=2; sunGroup.add(disc);
   const halo=new THREE.Sprite(new THREE.SpriteMaterial({map:makeSoftTexture(),color:0xfff0cc,transparent:true,opacity:0.6,blending:THREE.AdditiveBlending,depthWrite:false,fog:false}));
   halo.scale.set(130,130,1); halo.position.copy(disc.position); sunGroup.add(halo);
@@ -676,16 +697,24 @@ function twinkleNightSky(t){
 }
 
 /* ----------------------- procedural textures ------------------------ */
+let _dirtCanvas=null;
 function makeDirtTexture(){
-  const c=document.createElement('canvas'); c.width=c.height=1024; const ctx=c.getContext('2d');
-  ctx.fillStyle='#6b5640'; ctx.fillRect(0,0,1024,1024);
-  for(let i=0;i<2600;i++){ const x=Math.random()*1024,y=Math.random()*1024,r=Math.random()*26+3;
-    ctx.fillStyle = Math.random()<.5?`rgba(60,46,32,${Math.random()*0.4})`:`rgba(140,118,86,${Math.random()*0.32})`;
-    ctx.beginPath(); ctx.arc(x,y,r,0,7); ctx.fill(); }
-  ctx.lineWidth=3;
-  for(let i=0;i<60;i++){ ctx.strokeStyle=`rgba(28,22,16,${Math.random()*0.4+0.1})`; ctx.beginPath();
-    const cx=512+rand(-260,260),cy=512+rand(-260,260),rr=rand(20,160),a0=rand(0,6.28);
-    ctx.arc(cx,cy,rr,a0,a0+rand(0.5,2.4)); ctx.stroke(); }
+  // The 1024² dirt canvas (2600 arcs + 60 gouges) is the heaviest texture to draw and gets requested again on
+  // every dirt-track rebuild. Draw the canvas ONCE, then wrap a fresh CanvasTexture per call so each caller
+  // keeps its own independent .repeat (ground uses 36×36, roads use 3×3).
+  let c=_dirtCanvas;
+  if(!c){
+    c=document.createElement('canvas'); c.width=c.height=1024; const ctx=c.getContext('2d');
+    ctx.fillStyle='#6b5640'; ctx.fillRect(0,0,1024,1024);
+    for(let i=0;i<2600;i++){ const x=Math.random()*1024,y=Math.random()*1024,r=Math.random()*26+3;
+      ctx.fillStyle = Math.random()<.5?`rgba(60,46,32,${Math.random()*0.4})`:`rgba(140,118,86,${Math.random()*0.32})`;
+      ctx.beginPath(); ctx.arc(x,y,r,0,7); ctx.fill(); }
+    ctx.lineWidth=3;
+    for(let i=0;i<60;i++){ ctx.strokeStyle=`rgba(28,22,16,${Math.random()*0.4+0.1})`; ctx.beginPath();
+      const cx=512+rand(-260,260),cy=512+rand(-260,260),rr=rand(20,160),a0=rand(0,6.28);
+      ctx.arc(cx,cy,rr,a0,a0+rand(0.5,2.4)); ctx.stroke(); }
+    _dirtCanvas=c;
+  }
   const t=new THREE.CanvasTexture(c); t.wrapS=t.wrapT=THREE.RepeatWrapping; t.repeat.set(3,3); t.anisotropy=MAX_ANISO; return t;
 }
 function makeGrassTexture(){
@@ -724,33 +753,38 @@ function normalCanvas(){
   }catch(e){ x.fillStyle='#8080ff'; x.fillRect(0,0,S,S); }   // headless / no-canvas fallback (flat normal)
   _normalCanvas=c; return c;
 }
+const _surfNormals={};
 function makeSurfaceNormal(rx,ry){
-  const t=new THREE.CanvasTexture(normalCanvas()); t.wrapS=t.wrapT=THREE.RepeatWrapping; t.repeat.set(rx,ry); t.anisotropy=MAX_ANISO; return t;
+  const key=rx+'_'+ry; if(_surfNormals[key]) return _surfNormals[key];   // one texture per repeat setting, shared across levels
+  const t=new THREE.CanvasTexture(normalCanvas()); t.wrapS=t.wrapT=THREE.RepeatWrapping; t.repeat.set(rx,ry); t.anisotropy=MAX_ANISO;
+  _surfNormals[key]=t; return t;
 }
-// dedicated battle-damage normal map — coarse noise upsampled from a tiny grid so each UV
-// space contains only 3-4 large smooth dents, not a field of shimmering static.
+// dedicated battle-damage normal map — "crumpled metal": a field of overlapping round dents & bulges.
+// Earlier revisions failed two different ways:
+//   • a per-pixel random field read as shimmering STATIC, and
+//   • a 2×2 bilinear field was so smooth its slopes were ~flat, so (especially once mip-filtered) the
+//     crumple was invisible even at high normalScale.
+// This version SPLATS a few dozen smooth craters across the whole tile: every panel gets real, coarse
+// dents with steep-enough slopes to catch the light, and we render it with plain LINEAR filtering and
+// NO mipmaps so the perturbation never gets averaged back to flat at distance.
 let _dentTex=null;
 function dentNormal(){
   if(_dentTex) return _dentTex;
-  const CS=2, S=128;   // CS×CS seed grid → bilinear upsample to S×S → 2 large dents per UV tile
-  const data=new Uint8Array(S*S*4);
-  const h=new Float32Array(S*S);
-  // seed: random heights on a coarse 4×4 tiling grid (wraps seamlessly)
-  const seed=new Float32Array(CS*CS); for(let i=0;i<CS*CS;i++) seed[i]=Math.random();
-  // bilinear upsample with wrapping → smooth large-scale hills
-  for(let y=0;y<S;y++) for(let x=0;x<S;x++){
-    const cx=(x/S)*CS, cy=(y/S)*CS;
-    const ix=Math.floor(cx)%CS, iy=Math.floor(cy)%CS;
-    const fx=cx-Math.floor(cx), fy=cy-Math.floor(cy);
-    // smoothstep the fractions for a cosine-like falloff
-    const sx=fx*fx*(3-2*fx), sy=fy*fy*(3-2*fy);
-    h[y*S+x]=seed[ iy         *CS+ ix         ]*(1-sx)*(1-sy)
-             +seed[ iy         *CS+((ix+1)%CS) ]*sx    *(1-sy)
-             +seed[((iy+1)%CS)*CS+ ix           ]*(1-sx)*sy
-             +seed[((iy+1)%CS)*CS+((ix+1)%CS)  ]*sx    *sy;
-  }
-  // height → tangent-space normals
-  const str=9.0;
+  const S=128, h=new Float32Array(S*S);
+  const splat=(cx,cy,rad,depth)=>{                     // one smooth round dent/bulge, wrapped so it tiles
+    const r=Math.ceil(rad), r2=rad*rad;
+    for(let dy=-r;dy<=r;dy++) for(let dx=-r;dx<=r;dx++){
+      const d2=dx*dx+dy*dy; if(d2>r2) continue;
+      const f=1-Math.sqrt(d2)/rad;                     // 1 at centre → 0 at rim
+      const fall=f*f*(3-2*f);                          // smoothstep falloff
+      const ix=((cx+dx)%S+S)%S, iy=((cy+dy)%S+S)%S;
+      h[iy*S+ix]+=depth*fall;
+    }
+  };
+  for(let i=0;i<20;i++) splat(Math.random()*S|0, Math.random()*S|0, rand(14,34), rand(0.55,1.0)*(Math.random()<0.5?-1:1)); // big dents
+  for(let i=0;i<10;i++) splat(Math.random()*S|0, Math.random()*S|0, rand(8,14),  rand(0.30,0.6)*(Math.random()<0.5?-1:1)); // a few smaller creases (kept coarse — no fine static)
+  // height → tangent-space normals (central differences; strong enough that dents read at a glance)
+  const data=new Uint8Array(S*S*4), str=4.2;
   for(let y=0;y<S;y++) for(let x=0;x<S;x++){
     const l=h[y*S+((x-1+S)%S)], r=h[y*S+((x+1)%S)];
     const u=h[((y-1+S)%S)*S+x], dn=h[((y+1)%S)*S+x];
@@ -764,10 +798,54 @@ function dentNormal(){
   }
   _dentTex=new THREE.DataTexture(data,S,S,THREE.RGBAFormat);
   _dentTex.wrapS=_dentTex.wrapT=THREE.RepeatWrapping;
-  _dentTex.repeat.set(0.5,0.5);   // half tile per UV space → 2× larger dents per panel
+  _dentTex.repeat.set(1,1);
+  // plain linear, NO mipmaps: mip averaging was quietly flattening the crumple back out at car distance
+  _dentTex.magFilter=THREE.LinearFilter; _dentTex.minFilter=THREE.LinearFilter; _dentTex.generateMipmaps=false;
   _dentTex.anisotropy=MAX_ANISO;
   _dentTex.needsUpdate=true;
   return _dentTex;
+}
+// Battle-damage "dents": coarse crumpled blotches that only ever DARKEN the paint (black + transparent —
+// never lightened). Built from the same style of soft craters as the normal map, but consumed as an albedo
+// darkening mask instead of a light-catching normal (which was reading as bright bumps). R channel = how
+// dark/grimy that texel gets when fully wrecked.
+let _dentMaskTex=null;
+function dentMaskTexture(){
+  if(_dentMaskTex) return _dentMaskTex;
+  const S=128, h=new Float32Array(S*S);
+  const splat=(cx,cy,rad,amt)=>{ const r=Math.ceil(rad), r2=rad*rad;
+    for(let dy=-r;dy<=r;dy++) for(let dx=-r;dx<=r;dx++){ const d2=dx*dx+dy*dy; if(d2>r2) continue;
+      const f=1-Math.sqrt(d2)/rad, fall=f*f*(3-2*f);
+      const ix=((cx+dx)%S+S)%S, iy=((cy+dy)%S+S)%S; if(fall>h[iy*S+ix]) h[iy*S+ix]=amt*fall; } };
+  // many big overlapping craters → coarse, organic, HIGH-coverage (every panel lands on dents, none blank),
+  // and because splat wraps at the edges the whole thing tiles seamlessly (no visible repeat seam).
+  for(let i=0;i<26;i++) splat(Math.random()*S|0, Math.random()*S|0, rand(26,54), rand(0.55,1.0));
+  const data=new Uint8Array(S*S*4);
+  for(let i=0;i<S*S;i++){ const g=Math.min(1,h[i])*255|0; data[i*4]=g; data[i*4+1]=g; data[i*4+2]=g; data[i*4+3]=255; }
+  _dentMaskTex=new THREE.DataTexture(data,S,S,THREE.RGBAFormat);
+  _dentMaskTex.wrapS=_dentMaskTex.wrapT=THREE.RepeatWrapping;
+  _dentMaskTex.magFilter=THREE.LinearFilter; _dentMaskTex.minFilter=THREE.LinearFilter; _dentMaskTex.generateMipmaps=false;  // no mip wash-out
+  _dentMaskTex.needsUpdate=true; return _dentMaskTex;
+}
+// Wire the dent darkening into every body panel that carries the dent map. A per-material uniform (uDent
+// 0→1) is ramped by applyDamageVisual; the shader mixes the paint toward sooty near-black inside the dents
+// and leaves clean areas untouched. Purely darkening — nothing here ever brightens the surface.
+function applyDentDamage(root){
+  if(!root || !root.userData) return;
+  // Only the body + cabin materials (the exact ones applyDamageVisual ramps) — not every dent-mapped panel.
+  // Avoids compiling the darken-shader onto e.g. the buggy's underbody material, which never gets ramped.
+  const b=root.userData.body&&root.userData.body.material, cab=root.userData.cabin&&root.userData.cabin.material;
+  const mats=[]; if(b)mats.push(b); if(cab&&cab!==b)mats.push(cab);
+  for(const m of mats){
+    if(!m || m.userData.dent) continue;
+    const u={value:0}; m.userData.dent=u; const tex=dentMaskTexture();
+    m.onBeforeCompile=(sh)=>{ sh.uniforms.uDent=u; sh.uniforms.tDent={value:tex};
+      sh.fragmentShader='uniform float uDent;\nuniform sampler2D tDent;\n'+sh.fragmentShader.replace(
+        '#include <map_fragment>',
+        '#include <map_fragment>\n  { float dnt = texture2D(tDent, vUv*0.5).r * uDent; diffuseColor.rgb *= (1.0 - 1.25*dnt); }');   // *0.5 → projected 2x larger (no camo repeat); 1.25 → more pronounced sooty dents
+    };
+    m.needsUpdate=true;
+  }
 }
 function makeEnvTex(){   // a small reflection environment: sky -> warm horizon band -> ground, with a sun glow
   const cv=document.createElement('canvas'); cv.width=256; cv.height=128; const x=cv.getContext('2d');
@@ -780,17 +858,21 @@ function makeEnvTex(){   // a small reflection environment: sky -> warm horizon 
   x.fillStyle=sg; x.fillRect(146,12,80,80);
   const t=new THREE.CanvasTexture(cv); t.mapping=THREE.EquirectangularReflectionMapping; return t;
 }
-function makeBlobTexture(){   // soft round contact shadow
+let _blobTex=null;
+function makeBlobTexture(){   // soft round contact shadow (shared by every car — build once)
+  if(_blobTex) return _blobTex;
   const cv=document.createElement('canvas'); cv.width=cv.height=64; const x=cv.getContext('2d');
   const g=x.createRadialGradient(32,32,2,32,32,32);
   g.addColorStop(0,'rgba(0,0,0,0.6)'); g.addColorStop(0.6,'rgba(0,0,0,0.3)'); g.addColorStop(1,'rgba(0,0,0,0)');
-  x.fillStyle=g; x.fillRect(0,0,64,64); return new THREE.CanvasTexture(cv);
+  x.fillStyle=g; x.fillRect(0,0,64,64); _blobTex=new THREE.CanvasTexture(cv); return _blobTex;
 }
-function makeSkidTexture(){   // dark tyre streak, soft across its width
+let _skidTex=null;
+function makeSkidTexture(){   // dark tyre streak, soft across its width (shared by the whole skid pool)
+  if(_skidTex) return _skidTex;
   const cv=document.createElement('canvas'); cv.width=16; cv.height=64; const x=cv.getContext('2d');
   const g=x.createLinearGradient(0,0,16,0);
   g.addColorStop(0,'rgba(0,0,0,0)'); g.addColorStop(0.5,'rgba(0,0,0,0.85)'); g.addColorStop(1,'rgba(0,0,0,0)');
-  x.fillStyle=g; x.fillRect(0,0,16,64); return new THREE.CanvasTexture(cv);
+  x.fillStyle=g; x.fillRect(0,0,16,64); _skidTex=new THREE.CanvasTexture(cv); return _skidTex;
 }
 
 /* ====================================================================
@@ -889,6 +971,8 @@ function buildDerby(){
   { const avoid=stands.concat(Game.poleSpots.map(p=>({x:p.x,z:p.z,r:2.4})));
     const cands=[]; for(let i=0;i<46;i++){ const a=i/46*TAU, r=WALL_R+rand(7,26); cands.push({x:Math.cos(a)*r, z:Math.sin(a)*r}); }
     scatterTrees(cands, 4+Math.floor(rand(0,4)), (x,z)=> Math.hypot(x,z)>WALL_R+5 && clearOfList(x,z,avoid,1.4)); }
+  // tow truck pullout — nestled against the south wall
+  buildPullout(0, WALL_R-9, Math.PI);
 }
 
 function makeRampMesh(L,W,H){
@@ -917,6 +1001,23 @@ function addRamp(x,z,angle){
   const r={ x, z, angle, halfL, halfW, H };
   const mesh=makeRampMesh(halfL*2,halfW*2,H); mesh.position.set(x,0,z); mesh.rotation.y=angle; levelGroup.add(mesh);
   Game.ramps.push(r);
+}
+// Concrete pullout pad — where the tow truck parks between retrievals. With a `bay` it's a proper layby: the
+// paved apron (the "pullout") runs longer than the marked parking bay (the "yard") so the truck has room to
+// swing back onto the road. `bay` also drives the drivable+wall bulge via pulloutBulge (set BEFORE the wall).
+function buildPullout(x,z,angle,bay){
+  Game.pullout={x,z,angle, bay:bay||null};
+  const grp=new THREE.Group(); grp.position.set(x,0.015,z); grp.rotation.y=angle;
+  const padMat=new THREE.MeshStandardMaterial({color:0x7a7c7e,roughness:.92,metalness:.02});
+  const across = bay ? bay.depth+1 : 9;      // reaches from the road edge out to the (bulged) wall
+  const along  = bay ? bay.apronLen : 15;    // the apron is longer than the marked bay
+  const pad=new THREE.Mesh(new THREE.PlaneGeometry(across,along),padMat);
+  pad.rotation.x=-Math.PI/2; pad.receiveShadow=true; grp.add(pad);
+  // painted parking-bay lines (the "yard" — shorter than the apron)
+  const lineMat=new THREE.MeshStandardMaterial({color:0xffffff,roughness:.8,polygonOffset:true,polygonOffsetFactor:-1,polygonOffsetUnits:-1});
+  const half=(bay?bay.yardLen:11)/2;
+  for(const dz of [-half,half]){ const l=new THREE.Mesh(new THREE.PlaneGeometry(across,.18),lineMat); l.rotation.x=-Math.PI/2; l.position.z=dz; grp.add(l); }
+  levelGroup.add(grp);
 }
 // ---- crowd + bleachers ----
 function makeCrowdTexture(){
@@ -953,7 +1054,8 @@ function buildBleacher(x,z,faceAngle){
 function buildTrackWall(side){
   const STEPS=200, pos=[], idx=[], H=2.6;
   for(let i=0;i<=STEPS;i++){ const u=i/STEPS*TAU; const [cx,cz]=trkCenter(u); const [nx,nz]=trkNormal(u);
-    const ex=cx+nx*(TRK.halfW+0.3)*side, ez=cz+nz*(TRK.halfW+0.3)*side; pos.push(ex,0,ez, ex,H,ez); }
+    const woff=(TRK.halfW+0.3)+(side===1?pulloutBulge(i/STEPS):0);   // outer wall bulges out around the tow bay
+    const ex=cx+nx*woff*side, ez=cz+nz*woff*side; pos.push(ex,0,ez, ex,H,ez); }
   for(let i=0;i<STEPS;i++){ const a=i*2,b=i*2+1,c=i*2+2,d=i*2+3; idx.push(a,b,c, b,d,c); }
   const g=new THREE.BufferGeometry(); g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));
   g.setIndex(idx); g.computeVertexNormals();
@@ -978,10 +1080,14 @@ function makeArrowMesh(){
 }
 
 function buildRaceTrack(){
-  // road ribbon
+  // tow bay set up FIRST so the road ribbon, the outer wall AND the drivable clamp all bulge out around it (a layby)
+  { const bayU=0.75, pu=Course.at(bayU);
+    buildPullout(pu.cx+pu.nx*(TRK.halfW+4.5), pu.cz+pu.nz*(TRK.halfW+4.5), Math.atan2(pu.tx,pu.tz),
+      { u:bayU, halfU:0.025, depth:9, apronLen:24, yardLen:13 }); }
+  // road ribbon (its outer edge widens into the tow bay)
   const STEPS=170, pos=[], uv=[], idx=[];
-  for(let i=0;i<=STEPS;i++){ const u=i/STEPS*TAU; const [cx,cz]=trkCenter(u); const [nx,nz]=trkNormal(u);
-    pos.push(cx-nx*TRK.halfW,0,cz-nz*TRK.halfW,  cx+nx*TRK.halfW,0,cz+nz*TRK.halfW);  // road at ground level so wheels sit on it
+  for(let i=0;i<=STEPS;i++){ const u=i/STEPS*TAU; const [cx,cz]=trkCenter(u); const [nx,nz]=trkNormal(u); const ob=pulloutBulge(i/STEPS);
+    pos.push(cx-nx*TRK.halfW,0,cz-nz*TRK.halfW,  cx+nx*(TRK.halfW+ob),0,cz+nz*(TRK.halfW+ob));  // road at ground level so wheels sit on it
     uv.push(0,i/STEPS*24, 1,i/STEPS*24); }
   for(let i=0;i<STEPS;i++){ const a=i*2,b=i*2+1,c=i*2+2,d=i*2+3; idx.push(a,b,c, b,d,c); }
   const g=new THREE.BufferGeometry();
@@ -992,14 +1098,16 @@ function buildRaceTrack(){
   const road=new THREE.Mesh(g,Game.roadMat);
   road.receiveShadow=true; levelGroup.add(road);
 
-  // hard walls down both sides
+  // hard walls down both sides (the outer wall bulges around the tow bay that was set up at the top)
   buildTrackWall(1); buildTrackWall(-1);
   // tyre bumpers, SPACED OUT so a bad line clips the wall in the gaps between them
   const tg=tireGeo(); Game.tires=[];
   for(const side of [1,-1]){ let acc=0, prev=trkCenter(0);
     for(let i=1;i<=1200;i++){ const u=i/1200*TAU, c=trkCenter(u);
       acc+=Math.hypot(c[0]-prev[0],c[1]-prev[1]); prev=c;
-      if(acc>=36){ acc=0; const [nx,nz]=trkNormal(u);   // spaced wide (~double) so there's room to clip the wall in the gaps
+      if(acc>=36){ acc=0;
+        if(side===1 && pulloutBulge(i/1200)>0.01) continue;   // keep the tow bay clear of bumpers
+        const [nx,nz]=trkNormal(u);   // spaced wide (~double) so there's room to clip the wall in the gaps
         const tx=c[0]+nx*(TRK.halfW-1.7)*side, tz=c[1]+nz*(TRK.halfW-1.7)*side;   // sit inside the wall
         const t=new THREE.Mesh(tg,tireMat); t.position.set(tx,0.45,tz); t.rotation.x=Math.PI/2; levelGroup.add(t);
         Game.tires.push({x:tx,z:tz}); } } }
@@ -1041,6 +1149,7 @@ function buildRaceTrack(){
     const cands=[]; for(let i=0;i<84;i++){ const u=i/84*TAU; const [cx,cz]=trkCenter(u); const [nx,nz]=trkNormal(u);
       const off=TRK.halfW+rand(5,20); cands.push({x:cx+nx*off, z:cz+nz*off}); }
     scatterTrees(cands, 7+Math.floor(rand(0,5)), (x,z)=> clearOfList(x,z,avoid,1.4)); }
+  // (the tow bay + its layby were set up near the top, before the walls, so the wall could bulge around it)
 }
 function makeCheckerTexture(){
   const c=document.createElement('canvas'); c.width=c.height=64; const ctx=c.getContext('2d');
@@ -1083,7 +1192,7 @@ function cityFacade(i){ const k=i%8; if(!_cityFacades[k]) _cityFacades[k]=makeBu
 
 // offset the closed course polyline by `off` (signed, along right-hand normal) with MITRE joins,
 // so corners come out as clean sharp points instead of chamfered chords.
-function offsetRing(off){
+function offsetRing(off, bulge){
   const p=Course.pts, n=p.length, out=[];
   for(let i=0;i<n;i++){ const prev=p[(i-1+n)%n], cur=p[i], next=p[(i+1)%n];
     let d1x=cur[0]-prev[0], d1z=cur[1]-prev[1]; let l1=Math.hypot(d1x,d1z)||1; d1x/=l1; d1z/=l1;
@@ -1091,7 +1200,8 @@ function offsetRing(off){
     const n1x=d1z,n1z=-d1x, n2x=d2z,n2z=-d2x;                          // right-hand normals of the two segments
     let mx=n1x+n2x, mz=n1z+n2z; let ml=Math.hypot(mx,mz); if(ml<1e-6){ mx=n1x; mz=n1z; ml=1; } mx/=ml; mz/=ml;
     let denom=mx*n1x+mz*n1z; if(Math.abs(denom)<0.25) denom=denom<0?-0.25:0.25;   // clamp very sharp mitres
-    const dist=off/denom;
+    const o = bulge ? off + bulge((Course.cum[i]||0)/Course.total) : off;   // widen outward at the tow bay (+side rings only)
+    const dist=o/denom;
     out.push([cur[0]+mx*dist, cur[1]+mz*dist]);
   }
   return out;
@@ -1106,9 +1216,14 @@ function ringStrip(A,B,y,mat){
 }
 function buildCityTrack(){
   const HW=Course.halfW, SW=Course.sidewalk, total=Course.total;
-  // mitre-offset rings: clean square corners, no chamfer protruding into the road
-  const ringRoadL=offsetRing(-HW), ringRoadR=offsetRing(HW);
-  const ringSwL=offsetRing(-(HW+SW)), ringSwR=offsetRing(HW+SW);
+  // ---- tow bay: widen the road+sidewalk on one side of a straight into a layby, set up BEFORE the rings/props
+  //      so the road bulges out and every building/tree/pole clearance check keeps clear of it ----
+  { const bayU=0.12, a=Course.at(bayU);
+    buildPullout(a.cx+a.nx*(HW+3.5), a.cz+a.nz*(HW+3.5), Math.atan2(a.tx,a.tz),
+      { u:bayU, halfU:9/total, depth:7, apronLen:20, yardLen:11 }); }
+  // mitre-offset rings: clean square corners, no chamfer protruding into the road (+side bulges into the bay)
+  const ringRoadL=offsetRing(-HW), ringRoadR=offsetRing(HW, pulloutBulge);
+  const ringSwL=offsetRing(-(HW+SW)), ringSwR=offsetRing(HW+SW, pulloutBulge);
   // ---- road ----
   Game.roadMat=new THREE.MeshStandardMaterial({map:makeAsphaltTexture(),roughness:.95,side:THREE.DoubleSide, normalMap:makeSurfaceNormal(2,Math.max(8,total/16)), normalScale:new THREE.Vector2(0.5,0.5)});
   levelGroup.add(ringStrip(ringRoadL, ringRoadR, 0, Game.roadMat));
@@ -1123,7 +1238,7 @@ function buildCityTrack(){
   //      or an adjacent street's sidewalk (corners / chicanes) ----
   const corridor=HW+SW;                                  // outer edge of the drivable area (road + sidewalk)
   const CLEAR=0.6;                                        // buildings start at least this far past the sidewalk
-  const tooClose=(px,pz)=> Math.abs(Course.project(px,pz).lateral) < corridor+CLEAR;   // would overlap road or sidewalk
+  const tooClose=(px,pz)=>{ const pr=Course.project(px,pz); const b=pr.lateral>0?pulloutBulge(pr.u):0; return Math.abs(pr.lateral) < corridor+CLEAR+b; };   // also keep clear of the widened tow bay
   for(const sgn of [1,-1]){
     let s=rand(0,16);
     while(s<total){
@@ -1172,7 +1287,7 @@ function buildCityTrack(){
     for(let i=0;i<count;i++){ const a=Course.at(i/count); const px=a.cx+a.nx*(corridor+5), pz=a.cz+a.nz*(corridor+5);
       // near a concave corner a segment's side-normal can point straight down the NEXT road, dropping the pole on
       // the tarmac — skip any pole whose spot lands on (or within a margin of) a road/sidewalk anywhere on the loop
-      if(Math.abs(Course.project(px,pz).lateral) < corridor+1.5) continue;
+      { const pr=Course.project(px,pz); if(Math.abs(pr.lateral) < corridor+1.5+(pr.lateral>0?pulloutBulge(pr.u):0)) continue; }   // + keep clear of the tow bay
       buildFloodPole(px,pz);
       // lamp posts are SOLID street furniture: record a small footprint so the same push-out that stops cars
       // at the buildings stops them dead at a pole too (no more driving through them)
@@ -1188,23 +1303,31 @@ function buildCityTrack(){
       for(const sgn of [1,-1]){ const off=corridor+rand(2.4,6.0);
         cands.push({x:a.cx+a.nx*sgn*off, z:a.cz+a.nz*sgn*off}); } }
     scatterTrees(cands, Math.max(4, Math.round(total/70)), (x,z)=>{
-      if(Math.abs(Course.project(x,z).lateral) < corridor+1.0) return false;        // keep off the road + sidewalk
+      { const pr=Course.project(x,z); if(Math.abs(pr.lateral) < corridor+1.0+(pr.lateral>0?pulloutBulge(pr.u):0)) return false; }   // keep off the road + sidewalk + tow bay
       for(const b of Game.cityBuildings){ const dx=x-b.x, dz=z-b.z;
         if(Math.abs(dx*b.tx+dz*b.tz) < b.hw+1.8 && Math.abs(dx*b.nx+dz*b.nz) < b.hd+1.8) return false; }  // not on a building / lamp-post footprint
       return true; }); }
+  // (the tow bay + its layby were set up at the top so the road/sidewalk widen and the props keep clear of it)
 }
 
 // dirt RALLY track: loose road ribbon + tyre walls + jumps + barrels (no sidewalks/buildings). The hairpin
 // is the prime drift spot; drift scoring is armed across the whole loose surface.
 function buildDirtTrack(){
   const HW=Course.halfW, total=Course.total;
+  // tow bay: widen the loose road into a layby (dirt has no solid walls — the drivable-clamp bulge + a clear
+  // apron are enough). Set up before the road + tyre bumpers so the road widens and the bumpers keep clear.
+  { const bayU=0.65, a=Course.at(bayU);
+    buildPullout(a.cx+a.nx*(HW+4), a.cz+a.nz*(HW+4), Math.atan2(a.tx,a.tz),
+      { u:bayU, halfU:12/total, depth:8, apronLen:24, yardLen:13 }); }
   Game.roadMat=new THREE.MeshStandardMaterial({map:makeDirtTexture(),roughness:1,side:THREE.DoubleSide, normalMap:makeSurfaceNormal(4,4), normalScale:new THREE.Vector2(0.8,0.8)});
-  levelGroup.add(ringStrip(offsetRing(-HW), offsetRing(HW), 0, Game.roadMat));
+  levelGroup.add(ringStrip(offsetRing(-HW), offsetRing(HW, pulloutBulge), 0, Game.roadMat));
   // tyre walls down both edges (spaced), recorded for the bounce physics
   const tg=tireGeo(); Game.tires=[];
   for(const sgn of [1,-1]){ let acc=0, prev=Course.at(0);
     for(let i=1;i<=1600;i++){ const a=Course.at(i/1600); acc+=Math.hypot(a.cx-prev.cx,a.cz-prev.cz); prev=a;
-      if(acc>=14){ acc=0; const tx=a.cx+a.nx*(HW-1.0)*sgn, tz=a.cz+a.nz*(HW-1.0)*sgn;
+      if(acc>=14){ acc=0;
+        if(sgn===1 && pulloutBulge(i/1600)>0.01) continue;   // keep the tow bay clear of bumpers
+        const tx=a.cx+a.nx*(HW-1.0)*sgn, tz=a.cz+a.nz*(HW-1.0)*sgn;
         const t=new THREE.Mesh(tg,tireMat); t.position.set(tx,0.45,tz); t.rotation.x=Math.PI/2; levelGroup.add(t); Game.tires.push({x:tx,z:tz}); } } }
   // start/finish line (explicit vertices across the track)
   { const a=Course.at(0), hl=1.8; const P=[[-HW,-hl],[HW,-hl],[HW,hl],[-HW,hl]].map(([u,v])=>[a.cx+a.nx*u+a.tx*v, a.cz+a.nz*u+a.tz*v]);
@@ -1222,6 +1345,7 @@ function buildDirtTrack(){
   for(let k=0;k<5;k++){ const a=Course.at(rand(0,1)); const off=rand(-HW+4,HW-4); const bx=a.cx+a.nx*off, bz=a.cz+a.nz*off; if(!tooCloseToRamp(bx,bz)) spawnBarrel(bx,bz); }
   // flood poles spaced around the loop
   { const spacing=72, count=Math.max(4,Math.round(total/spacing)); for(let i=0;i<count;i++){ const a=Course.at(i/count); buildFloodPole(a.cx+a.nx*(HW+6), a.cz+a.nz*(HW+6)); } }
+  // (the tow bay + its layby were set up at the top so the loose road widens and the bumpers keep clear)
 }
 
 /* ====================================================================
@@ -1272,6 +1396,41 @@ function tooCloseToRamp(x,z,margin=2.5){
 // rounded/beveled box so the cars aren't blocky — same (w,h,d) axes as BoxGeometry, plus a corner radius.
 // cached by signature so we don't rebuild identical geometry per car.
 const _rbCache={};
+// Triplanar box UVs at a fixed world density. ExtrudeGeometry emits world-scale, per-face
+// inconsistent UVs (u-span ~1.5 vs v-span ~4.2 on a body panel), so a tiling normal map lands at
+// wildly different densities per face and reads as flat. Projecting each vertex onto the plane
+// perpendicular to its dominant normal gives one uniform density everywhere the dents can read.
+function applyBoxUV(geo, density){
+  const pos=geo.attributes.position, nor=geo.attributes.normal, n=pos.count, uv=new Float32Array(n*2);
+  for(let i=0;i<n;i++){
+    const x=pos.getX(i),y=pos.getY(i),z=pos.getZ(i);
+    const ax=Math.abs(nor.getX(i)),ay=Math.abs(nor.getY(i)),az=Math.abs(nor.getZ(i));
+    let u,v;
+    if(ax>=ay&&ax>=az){ u=z; v=y; }         // x-facing panel -> project ZY
+    else if(ay>=ax&&ay>=az){ u=x; v=z; }    // y-facing panel -> project XZ
+    else { u=x; v=y; }                       // z-facing panel -> project XY
+    uv[i*2]=u*density; uv[i*2+1]=v*density;
+  }
+  geo.setAttribute('uv', new THREE.BufferAttribute(uv,2));
+}
+// Weld a non-indexed geometry into an indexed one (merging verts that share position+normal+uv).
+// computeTangents() REQUIRES an index, so without this the tangent-space normal map never got tangents.
+function indexGeometry(geo){
+  const pos=geo.attributes.position, nor=geo.attributes.normal, uv=geo.attributes.uv, n=pos.count;
+  const map=new Map(), idx=new Array(n), P=[],N=[],U=[]; let m=0; const q=v=>Math.round(v*1000);
+  for(let i=0;i<n;i++){
+    const key=q(pos.getX(i))+'_'+q(pos.getY(i))+'_'+q(pos.getZ(i))+'|'+q(nor.getX(i))+'_'+q(nor.getY(i))+'_'+q(nor.getZ(i))+'|'+q(uv.getX(i))+'_'+q(uv.getY(i));
+    let j=map.get(key);
+    if(j===undefined){ j=m++; map.set(key,j);
+      P.push(pos.getX(i),pos.getY(i),pos.getZ(i)); N.push(nor.getX(i),nor.getY(i),nor.getZ(i)); U.push(uv.getX(i),uv.getY(i)); }
+    idx[i]=j;
+  }
+  const g=new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(P,3));
+  g.setAttribute('normal',   new THREE.Float32BufferAttribute(N,3));
+  g.setAttribute('uv',       new THREE.Float32BufferAttribute(U,2));
+  g.setIndex(idx); return g;
+}
 function roundedBox(w,h,d,r){
   r=Math.max(0.02, Math.min(r, w/2-0.02, h/2-0.02, d/2-0.02));
   const key=w.toFixed(2)+'_'+h.toFixed(2)+'_'+d.toFixed(2)+'_'+r.toFixed(2);
@@ -1284,12 +1443,14 @@ function roundedBox(w,h,d,r){
   s.lineTo(hw, hh-r);  s.quadraticCurveTo(hw,hh, hw-r,hh);
   s.lineTo(-hw+r, hh); s.quadraticCurveTo(-hw,hh, -hw,hh-r);
   s.lineTo(-hw, -hh+r);s.quadraticCurveTo(-hw,-hh, -hw+r,-hh);
-  const geo=new THREE.ExtrudeGeometry(s,{depth:id, bevelEnabled:true, bevelThickness:r, bevelSize:r, bevelSegments:3, steps:1, curveSegments:6});
+  let geo=new THREE.ExtrudeGeometry(s,{depth:id, bevelEnabled:true, bevelThickness:r, bevelSize:r, bevelSegments:3, steps:1, curveSegments:6});
   geo.translate(0,0,-id/2); geo.computeVertexNormals();
-  // Tangent vectors are required for correct tangent-space normal mapping.
-  // ExtrudeGeometry has non-normalised UVs, so the derivative fallback misfires;
-  // explicit Mikktspace tangents fix it without touching the UV layout.
-  try{ if(geo.index) geo.computeTangents(); }catch(e){}
+  // Uniform UVs + welded index + tangents so the damage dent normal-map actually perturbs every panel.
+  // (Previously `if(geo.index)` was always false for ExtrudeGeometry, so computeTangents never ran and
+  //  dents were invisible.) Keep the flat per-face normals from above — only add UVs, an index and tangents.
+  applyBoxUV(geo, 0.7);
+  geo=indexGeometry(geo);
+  try{ geo.computeTangents(); }catch(e){}
   _rbCache[key]=geo; return geo;
 }
 // a plain steel rim: a metallic face disc (slightly proud of the tyre) with a small hub cap and a few lug bumps
@@ -1507,6 +1668,56 @@ function buildMuscleMesh(color,isPlayer){
   g.userData.baseColor=new THREE.Color(color); return g;
 }
 
+// heavy-duty wrecker / tow truck — NPC only, not player-selectable
+// Cab is intentionally tall (semi-style) so it's visually unmistakable.
+function buildTowMesh(color,isPlayer){
+  const g=new THREE.Group();
+  const bodyMat=new THREE.MeshStandardMaterial({color,roughness:.60,metalness:.30,
+    normalMap:dentNormal(),normalScale:new THREE.Vector2(0,0)});
+  const darkMat=new THREE.MeshStandardMaterial({color:0x222529,roughness:.65,metalness:.50});
+  const glassMat=new THREE.MeshStandardMaterial({color:0x3a8899,roughness:.10,metalness:.30,transparent:true,opacity:.55});
+  const bumperMat=new THREE.MeshStandardMaterial({color:0x111214,roughness:.40,metalness:.75});
+  const armMat=new THREE.MeshStandardMaterial({color:0x3a3d42,roughness:.50,metalness:.65});
+  // chassis rail (unchanged)
+  const chassis=new THREE.Mesh(roundedBox(2.12,.50,4.9,.10),darkMat); chassis.position.set(0,.43,-.08); chassis.castShadow=true; g.add(chassis);
+  // === TALL CAB (2× original height) ===
+  // bottom of cab sits on chassis at y≈0.45; height 2.20 → center 1.55, top 2.65
+  const cab=new THREE.Mesh(roundedBox(2.06,2.20,2.0,.14),bodyMat); cab.position.set(0,1.55,1.28); cab.castShadow=true; g.add(cab);
+  const cabRoof=new THREE.Mesh(roundedBox(2.0,.22,1.88,.10),bodyMat); cabRoof.position.set(0,2.76,1.28); cabRoof.castShadow=true; g.add(cabRoof);
+  // windows sit in upper portion of the tall cab
+  const windshield=new THREE.Mesh(roundedBox(1.86,.70,.10,.05),glassMat); windshield.position.set(0,2.12,.30); g.add(windshield);
+  const rearWin=new THREE.Mesh(roundedBox(1.86,.60,.10,.05),glassMat); rearWin.position.set(0,2.12,2.27); g.add(rearWin);
+  // side windows (lower pane on each side)
+  for(const sx of [-.72,.72]){ const sw=new THREE.Mesh(roundedBox(.10,.55,1.10,.05),glassMat); sw.position.set(sx,2.05,.75); g.add(sw); }
+  // flatbed (rear half — height unchanged)
+  const bed=new THREE.Mesh(roundedBox(2.02,.18,2.60,.06),darkMat); bed.position.set(0,.87,-1.22); bed.castShadow=true; g.add(bed);
+  for(const sx of [-1.0,1.0]){ const rail=new THREE.Mesh(roundedBox(.10,.16,2.60,.04),bodyMat); rail.position.set(sx,1.04,-1.22); g.add(rail); }
+  // tow arm boom (unchanged)
+  const armBase=new THREE.Mesh(roundedBox(.64,.32,.54,.06),armMat); armBase.position.set(0,1.06,-2.26); g.add(armBase);
+  const arm=new THREE.Mesh(new THREE.BoxGeometry(.20,.20,2.1),armMat); arm.position.set(0,1.56,-2.50); arm.rotation.x=-.44; g.add(arm);
+  const crossbar=new THREE.Mesh(new THREE.BoxGeometry(1.08,.13,.17),armMat); crossbar.position.set(0,2.42,-2.98); g.add(crossbar);
+  const chain=new THREE.Mesh(new THREE.BoxGeometry(.06,.50,.06),armMat); chain.position.set(0,1.88,-2.95); g.add(chain);
+  // warning light bar — raised to sit on the tall cab roof
+  const wlMat=new THREE.MeshStandardMaterial({color:0xffcc00,emissive:0xffaa00,emissiveIntensity:.35});
+  const wl=new THREE.Mesh(new THREE.BoxGeometry(1.44,.20,.50),wlMat); wl.position.set(0,2.87,1.28); g.add(wl);
+  // bumpers
+  const fB=new THREE.Mesh(roundedBox(2.20,.56,.42,.14),bumperMat); fB.position.set(0,.63,2.52); fB.castShadow=true; g.add(fB);
+  const rB=new THREE.Mesh(roundedBox(2.20,.56,.42,.14),bumperMat); rB.position.set(0,.63,-2.52); rB.castShadow=true; g.add(rB);
+  // wheels
+  const {wheels,frontPivots}=makeWheels(g,[[-1.02,.58,1.38,'f'],[1.02,.58,1.38,'f'],[-1.02,.58,-1.48,'r'],[1.02,.58,-1.48,'r']],.58,.58);
+  // running lights
+  const hlMat=new THREE.MeshStandardMaterial({color:0xfff5cc,emissive:0xfff2c0,emissiveIntensity:.8,polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-2});
+  for(const sx of [-.72,.72]){ const hl=new THREE.Mesh(new THREE.BoxGeometry(.48,.26,.10),hlMat); hl.position.set(sx,.70,2.66); g.add(hl); }
+  const tlMat=new THREE.MeshStandardMaterial({color:0x550000,emissive:0xff2222,emissiveIntensity:.7,polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-2});
+  for(const sx of [-.72,.72]){ const tl=new THREE.Mesh(new THREE.BoxGeometry(.48,.26,.10),tlMat); tl.position.set(sx,.70,-2.66); g.add(tl); }
+  addReverseLights(g,[-.36,.36],.70,-2.68);
+  addMarker(g,isPlayer);
+  g.userData.body=cab; g.userData.cabin=cabRoof; g.userData.wheels=wheels; g.userData.frontPivots=frontPivots;
+  g.userData.tailMat=tlMat; g.userData.headlightMat=hlMat; g.userData.baseColor=new THREE.Color(color);
+  g.userData.warnLightMat=wlMat;   // exposed for flash animation in the game loop
+  return g;
+}
+
 // per-class feel. Footprint (collider) is identical for everyone; only mass/power/grip/health/ram vary.
 // each class is pulled apart on MANY axes so they really feel different:
 //   massMul  weight (collision shove + stability/spin resistance)     engine  acceleration (drive force)
@@ -1520,6 +1731,8 @@ const VEHICLES={
   van:    { label:'VAN',    build:buildVanMesh,    massMul:1.72, engine:1.54, drag:1.60, brake:0.86, grip:0.80, turn:0.72, health:1.65, ram:1.72, pitch:0.64, lump:0.36, blurb:'Armoured battering ram — toughest and hardest-hitting, but slow & wide' },
   buggy:  { label:'BUGGY',  build:buildBuggyMesh,  massMul:0.60, engine:1.32, drag:1.12, brake:1.24, grip:1.32, turn:1.45, health:0.55, ram:0.65, pitch:1.42, lump:0.06, blurb:'Featherweight rocket — blistering accel & cornering, made of glass' },
   muscle: { label:'MUSCLE', build:buildMuscleMesh, massMul:1.10, engine:1.40, drag:0.78, brake:1.04, grip:0.855, turn:0.95, health:0.90, ram:1.02, pitch:0.84, lump:0.22, blurb:'Speed demon — highest top end, light on armour and grip, loose in the bends' },
+  // NPC-only — not in PLAYER_TYPES or ENEMY_TYPES
+  tow:    { label:'TOW',    build:buildTowMesh,    massMul:3.20, engine:0.44, drag:1.62, brake:1.20, grip:0.85, turn:0.60, health:5.00, ram:2.00, pitch:0.52, lump:0.50, blurb:'' },
 };
 const PLAYER_TYPES=['car','truck','van','buggy','muscle'];
 const ENEMY_TYPES=['car','truck','van','buggy','muscle'];
@@ -1534,7 +1747,7 @@ class Car{
     this.id=++_carIdSeq;
     this.isPlayer=isPlayer; this.name=name; this.color=color; this.type=(type&&VEHICLES[type])?type:'car';
     const spec=VEHICLES[this.type]; this.spec=spec;
-    this.mesh=spec.build(color,isPlayer); applyEnvReflections(this.mesh); scene.add(this.mesh);
+    this.mesh=spec.build(color,isPlayer); applyEnvReflections(this.mesh); applyDentDamage(this.mesh); scene.add(this.mesh);
     // normalMap is pre-bound in each material constructor (normalScale starts at (0,0));
     // applyDamageVisual only ever changes normalScale so the compiled shader always has USE_NORMALMAP.
     // ---- per-car physics derived from the class + (player) career upgrades ----
@@ -1548,6 +1761,11 @@ class Car{
     this.enginePow=CAR.enginePow*eng; this.brakePow=CAR.brakePow*spec.brake; this.reversePow=CAR.reversePow*eng;
     this.turnRate=CAR.turnRate*spec.turn; this.gripF=CAR.grip*grip; this.gripH=CAR.gripHand*grip; this.ram=ram;
     this.drag=CAR.drag*spec.drag;                       // per-class top speed (lower drag = faster flat-out)
+    // approx flat-out top speed from THIS car's own engine vs drag + rolling resistance. "Stuck" is a small
+    // fraction of that, so a heavy low-power rig (the tow truck) gets a much lower threshold — it can actually
+    // re-exceed its own crawl speed and leave recovery instead of looping there forever.
+    this.topSpeedEst=(-CAR.roll+Math.sqrt(CAR.roll*CAR.roll+4*this.drag*this.enginePow))/(2*this.drag);
+    this.stuckSpeed=Math.max(1.5, this.topSpeedEst*0.12);
     this.enginePitch=spec.pitch; this.engineLump=spec.lump;   // per-class engine voice (only the player's is heard)
     this.blob=new THREE.Mesh(new THREE.PlaneGeometry(5.6,5.6),     // soft contact shadow under the car
       new THREE.MeshBasicMaterial({map:makeBlobTexture(),transparent:true,opacity:0.42,depthWrite:false}));
@@ -1566,7 +1784,7 @@ class Car{
     this.lastVx=0; this.lastVz=0; this.visRoll=0; this.visPitch=0; this.pitchDrive=0; this.skidTimer=0;
     this.rampPitch=0; this.rampPitchTarget=0; this.squash=0;
     this.nitroT=0; this.shieldT=0; this.dmgT=0; this.engineCut=false; this.sputterCd=0;
-    this.stuckT=0; this.recoverT=0; this.recoverSteer=0; this.recoverThrottle=0;   // AI deadlock recovery
+    this.stuckT=0; this.recoverT=0; this.recoverCd=0; this.recoverSteer=0; this.recoverThrottle=0;   // AI deadlock recovery (+ post-recovery cooldown)
     this.pullSide=Math.random()<0.5?-1:1; this.braking=false; this.reversing=false; this.wheelspinning=false;  // power-up timers + limp sputter
     this.dentK=rand(0.8,1.3);   // per-car crumple intensity so damage doesn't look identical
     this.shieldRing=null;
@@ -1581,7 +1799,7 @@ class Car{
     this.hitFlash=0; this.visRoll=this.visPitch=0; this.pitchDrive=0; this.skidTimer=0;
     this.rampPitch=0; this.rampPitchTarget=0; this.squash=0; this.onRamp=false;
     this.nitroT=0; this.shieldT=0; this.dmgT=0; this.engineCut=false; this.sputterCd=0;
-    this.stuckT=0; this.recoverT=0; this.recoverSteer=0; this.recoverThrottle=0;   // AI deadlock recovery
+    this.stuckT=0; this.recoverT=0; this.recoverCd=0; this.recoverSteer=0; this.recoverThrottle=0;   // AI deadlock recovery (+ post-recovery cooldown)
     this.pullSide=Math.random()<0.5?-1:1; this.braking=false; this.reversing=false; this.wheelspinning=false;
     this.groundY=0;
     if(this.blob) this.blob.visible=true;
@@ -1621,8 +1839,9 @@ class Car{
     // off-road grass (city only): bogs the car down hard at any speed, and the higher the speed the more
     // it tugs the steering around — so cutting the corner across the grass is never worth it
     let grass=0;
-    if(Game.levelType==='city' && !air){ const lat=Math.abs(Course.project(this.x,this.z).lateral);
-      grass=clamp((lat-(Course.halfW+Course.sidewalk))/2.5, 0, 1); }
+    if(Game.levelType==='city' && !air){ const pr=this._proj||Course.project(this.x,this.z); const lat=Math.abs(pr.lateral);   // _proj: one projection/frame
+      const paved=Course.halfW+Course.sidewalk+(pr.lateral>0?pulloutBulge(pr.u):0);   // the widened bay is paved, not grass
+      grass=clamp((lat-paved)/2.5, 0, 1); }
     const grassDrive=1-0.36*grass;             // grass saps acceleration (softened ~half)
     let fx=Math.sin(this.angle), fz=Math.cos(this.angle);
     let vForward=this.vx*fx+this.vz*fz;
@@ -1658,7 +1877,10 @@ class Car{
     const onThrottle = ctrl.throttle>0 && !air;
     const onBrake    = ctrl.throttle<0 && vForward>2 && !air;
     const steerFeel  = onBrake ? 0.82 : (onThrottle ? 1.07 : 1.0);
-    this.angle += ctrl.steer*this.turnRate*steerMul*steerFeel*speedFactor*dir*dt*(air?0.25:1);
+    // high-speed stability: yaw authority tapers off above ~34 mph (real cars can't flick lock-to-lock at
+    // speed). Floored at 0.72 so AI still make every corner; low-speed handling is untouched.
+    const hiSpd = 1 - clamp((sp-15)*0.014, 0, 0.28);
+    this.angle += ctrl.steer*this.turnRate*steerMul*steerFeel*hiSpd*speedFactor*dir*dt*(air?0.25:1);
     // a damaged car is vague and pulls toward its mangled side
     if(!air) this.angle += this.pullSide*(1-clamp(hf,0,1))*0.18*speedFactor*dt;
     this.steerVis=lerp(this.steerVis,ctrl.steer,0.2);
@@ -1746,13 +1968,14 @@ class Car{
     bm.metalness=clamp(0.28-t*0.28,0,1); cm.metalness=clamp(0.28-t*0.28,0,1);
     // env reflections disappear quickly — scratched/scorched paint kills the mirror finish
     if(bm.envMapIntensity!==undefined){ const ei=clamp(0.5-t*4,0,0.5); bm.envMapIntensity=ei; cm.envMapIntensity=ei; }
-    // crumpled metal: below 75% health, start wrinkling the panels with a dent normal map that deepens
-    // as the car gets more wrecked (per-car random intensity so they don't all crumple identically)
-    // the dent normal map is already bound (scale 0) from the constructor — just deepen the wrinkles as the
-    // car gets wrecked. 0 above 75% health, ramping to a deep crumple near death (per-car random intensity).
-    const dent = clamp((t-0.10)/0.90, 0, 1) * (this.dentK||1) * 2.8;
-    if(bm.normalScale) bm.normalScale.set(dent,dent);
-    if(cm.normalScale) cm.normalScale.set(dent,dent);
+    // battle-damage dents: a DARKENING-only overlay (black + transparent) that fades in with damage. No
+    // normal-map lightening at all — normalScale stays pinned at 0; the dents are pure sooty darkening in
+    // the paint shader (per-car intensity so they don't all crumple identically).
+    const dnt = clamp((t-0.10)/0.90, 0, 1) * (this.dentK||1);
+    if(bm.normalScale) bm.normalScale.set(0,0);
+    if(cm.normalScale) cm.normalScale.set(0,0);
+    if(bm.userData.dent) bm.userData.dent.value = dnt;
+    if(cm.userData.dent) cm.userData.dent.value = dnt;
   }
 
   syncMesh(dt){
@@ -1800,7 +2023,7 @@ class Car{
       const fl=this.shieldRing.userData.flash||0; this.shieldRing.material.opacity=0.16+0.5*fl+(this.shieldT<1?0.1*Math.sin(Game.elapsed*30):0);
       this.shieldRing.userData.flash=Math.max(0,fl-dt*3);
     } else if(this.shieldRing){ this.shieldRing.visible=false; }
-    if(this.health<this.maxHealth*0.45 || !this.alive){ this.smokeTimer-=dt;
+    if((this.health<this.maxHealth*0.45 || !this.alive) && this.mesh.visible){ this.smokeTimer-=dt;   // hidden (towed-away) wrecks emit nothing
       if(this.smokeTimer<=0){
         const bx=this.x-Math.sin(this.angle)*0.6, bz=this.z-Math.cos(this.angle)*0.6;
         if(!this.alive){
@@ -1820,64 +2043,88 @@ class Car{
 /* ====================================================================
    PARTICLES
    ==================================================================== */
-function makeSoftTexture(){
+let _softTex=null;
+function makeSoftTexture(){   // soft white radial — shared by particles, halos, flood glows, powerups
+  if(_softTex) return _softTex;
   const c=document.createElement('canvas'); c.width=c.height=64; const ctx=c.getContext('2d');
   const g=ctx.createRadialGradient(32,32,0,32,32,32);
   g.addColorStop(0,'rgba(255,255,255,1)'); g.addColorStop(0.4,'rgba(255,255,255,0.6)'); g.addColorStop(1,'rgba(255,255,255,0)');
-  ctx.fillStyle=g; ctx.fillRect(0,0,64,64); return new THREE.CanvasTexture(c);
+  ctx.fillStyle=g; ctx.fillRect(0,0,64,64); _softTex=new THREE.CanvasTexture(c); return _softTex;
 }
-// persistent tyre marks laid on the ground when sliding / braking (ring-buffer pool)
+// persistent tyre marks laid on the ground when sliding / braking (ring-buffer pool).
+// All marks live in ONE merged BufferGeometry drawn with ONE material — the old version was one Mesh per
+// mark (280 draw calls when the pool filled), which dominated frame cost on weak GPUs. Unused slots are
+// zero-area quads at the origin, so they rasterise to nothing.
 class SkidMarks{
-  constructor(n){ this.n=n; this.i=0; this.meshes=[];
-    const geo=new THREE.PlaneGeometry(0.5,1.7); geo.rotateX(-Math.PI/2); const tex=makeSkidTexture();
-    for(let k=0;k<n;k++){ const m=new THREE.Mesh(geo, new THREE.MeshBasicMaterial({map:tex,transparent:true,opacity:0.55,
+  constructor(n){ this.n=n; this.i=0;
+    const geo=new THREE.BufferGeometry();
+    const pos=new Float32Array(n*4*3), uv=new Float32Array(n*4*2), idx=new Uint16Array(n*6);
+    for(let k=0;k<n;k++){ const o=k*4, j=k*6;
+      uv.set([0,0, 1,0, 0,1, 1,1], k*8);
+      idx[j]=o; idx[j+1]=o+2; idx[j+2]=o+1; idx[j+3]=o+2; idx[j+4]=o+3; idx[j+5]=o+1;   // CCW from above (+y normal)
+    }
+    geo.setAttribute('position', new THREE.BufferAttribute(pos,3));
+    geo.setAttribute('uv', new THREE.BufferAttribute(uv,2));
+    geo.setIndex(new THREE.BufferAttribute(idx,1));
+    this.pos=geo.attributes.position;
+    this.mesh=new THREE.Mesh(geo, new THREE.MeshBasicMaterial({map:makeSkidTexture(),transparent:true,opacity:0.55,
       depthWrite:false, polygonOffset:true, polygonOffsetFactor:-3, polygonOffsetUnits:-3}));
-      m.visible=false; m.renderOrder=1; scene.add(m); this.meshes.push(m); } }
-  reset(){ for(const m of this.meshes) m.visible=false; this.i=0; }
-  add(x,z,y,angle){ const m=this.meshes[this.i]; this.i=(this.i+1)%this.n; m.position.set(x,y+0.04,z); m.rotation.y=angle; m.visible=true; }
+    this.mesh.renderOrder=1; this.mesh.frustumCulled=false;   // verts move every add — skip stale-bounds culling
+    scene.add(this.mesh);
+  }
+  reset(){ this.pos.array.fill(0); this.pos.needsUpdate=true; this.i=0; }
+  add(x,z,y,angle){   // lay a 0.5×1.7 quad at (x,z), long axis along the car heading (same footprint as before)
+    const hw=0.25, hl=0.85, fx=Math.sin(angle), fz=Math.cos(angle), rx=Math.cos(angle), rz=-Math.sin(angle);
+    const a=this.pos.array, o=this.i*12, yy=y+0.04;
+    a[o  ]=x-rx*hw-fx*hl; a[o+1 ]=yy; a[o+2 ]=z-rz*hw-fz*hl;
+    a[o+3]=x+rx*hw-fx*hl; a[o+4 ]=yy; a[o+5 ]=z+rz*hw-fz*hl;
+    a[o+6]=x-rx*hw+fx*hl; a[o+7 ]=yy; a[o+8 ]=z-rz*hw+fz*hl;
+    a[o+9]=x+rx*hw+fx*hl; a[o+10]=yy; a[o+11]=z+rz*hw+fz*hl;
+    this.pos.needsUpdate=true;
+    this.i=(this.i+1)%this.n;
+  }
 }
 
+const _PCOL=new THREE.Color();   // scratch colour for particle spawns (no per-spawn allocation)
 class Particles{
-  constructor(){ this.tex=makeSoftTexture(); this.list=[]; this.MAX=540; }
-  _s(mat){ const s=new THREE.Sprite(mat); scene.add(s); return s; }
-  smoke(x,y,z,dark){ if(this.list.length>this.MAX) return;
-    const col=new THREE.Color().setHSL(0.07,0.05,dark?0.12:0.55);
-    const s=this._s(new THREE.SpriteMaterial({map:this.tex,color:col,transparent:true,opacity:0.55,depthWrite:false}));
+  // POOLED sprites: allocated once at boot, recycled forever. The old version built a new SpriteMaterial
+  // per spawn and disposed it on death — constant allocation + GC pressure in the hottest visual path.
+  // Reuse just mutates color/opacity/blending on an existing material (pure GL state, no recompile).
+  constructor(){ this.tex=makeSoftTexture(); this.list=[]; this.MAX=QUALITY.maxParticles; this.budget=this.MAX;
+    this.pool=[];
+    for(let i=0;i<this.MAX;i++){ const s=new THREE.Sprite(new THREE.SpriteMaterial({map:this.tex,transparent:true,depthWrite:false}));
+      s.visible=false; scene.add(s); this.pool.push(s); } }
+  _s(col,op,blend){ if(this.list.length>=this.budget) return null;   // budget can be lowered live by the perf governor
+    const s=this.pool.pop(); if(!s) return null; const m=s.material;
+    if(col.isColor) m.color.copy(col); else m.color.set(col);
+    m.opacity=op; m.blending=blend||THREE.NormalBlending;
+    s.visible=true; return s; }
+  _free(s){ s.visible=false; this.pool.push(s); }
+  smoke(x,y,z,dark){ const s=this._s(_PCOL.setHSL(0.07,0.05,dark?0.12:0.55),0.55); if(!s) return;
     s.position.set(x+rand(-0.3,0.3),y,z+rand(-0.3,0.3)); const sc=rand(1.0,1.8); s.scale.set(sc,sc,sc);
     this.list.push({s,life:rand(0.8,1.5),max:1.5,vx:rand(-0.6,0.6),vy:rand(1.2,2.2),vz:rand(-0.6,0.6),grow:2.4,op:0.55}); }
   // thick, near-black column for a destroyed car — big, opaque and long-lasting so wrecks read clearly
-  darkSmoke(x,y,z){ if(this.list.length>this.MAX) return;
-    const col=new THREE.Color().setHSL(0.06,0.10,rand(0.04,0.10));
-    const s=this._s(new THREE.SpriteMaterial({map:this.tex,color:col,transparent:true,opacity:0.9,depthWrite:false}));
+  darkSmoke(x,y,z){ const s=this._s(_PCOL.setHSL(0.06,0.10,rand(0.04,0.10)),0.9); if(!s) return;
     s.position.set(x+rand(-0.4,0.4),y,z+rand(-0.4,0.4)); const sc=rand(1.7,2.8); s.scale.set(sc,sc,sc);
     this.list.push({s,life:rand(1.6,2.6),max:2.6,vx:rand(-0.5,0.5),vy:rand(1.5,2.6),vz:rand(-0.5,0.5),grow:3.0,op:0.9}); }
-  dust(x,y,z){ if(this.list.length>this.MAX) return;
-    const s=this._s(new THREE.SpriteMaterial({map:this.tex,color:0xb9a97a,transparent:true,opacity:0.4,depthWrite:false}));
+  dust(x,y,z){ const s=this._s(0xb9a97a,0.4); if(!s) return;
     s.position.set(x,y,z); const sc=rand(0.5,1.0); s.scale.set(sc,sc,sc);
     this.list.push({s,life:0.5,max:0.5,vx:rand(-1,1),vy:rand(0.4,1.0),vz:rand(-1,1),grow:2.0,op:0.4}); }
-  skid(x,z){ if(this.list.length>this.MAX) return;   // pronounced dark tyre-smoke when sliding
-    const s=this._s(new THREE.SpriteMaterial({map:this.tex,color:0x1d1d1f,transparent:true,opacity:0.6,depthWrite:false}));
+  skid(x,z){ const s=this._s(0x1d1d1f,0.6); if(!s) return;   // pronounced dark tyre-smoke when sliding
     s.position.set(x,0.14,z); const sc=rand(1.1,1.8); s.scale.set(sc,sc,sc);
     this.list.push({s,life:rand(0.8,1.3),max:1.3,vx:rand(-0.3,0.3),vy:rand(0.3,0.7),vz:rand(-0.3,0.3),grow:1.6,op:0.6}); }
   sparks(x,y,z,n){ n=Math.min(n,18);
-    for(let i=0;i<n;i++){ if(this.list.length>this.MAX) break;
-      const s=this._s(new THREE.SpriteMaterial({map:this.tex,color:new THREE.Color().setHSL(0.09,1,rand(.55,.7)),
-        transparent:true,opacity:1,depthWrite:false,blending:THREE.AdditiveBlending}));
+    for(let i=0;i<n;i++){ const s=this._s(_PCOL.setHSL(0.09,1,rand(.55,.7)),1,THREE.AdditiveBlending); if(!s) break;
       s.position.set(x,y,z); const sc=rand(0.18,0.4); s.scale.set(sc,sc,sc);
       this.list.push({s,life:rand(0.25,0.55),max:0.55,vx:rand(-7,7),vy:rand(2,7),vz:rand(-7,7),grow:0.2,op:1,grav:14}); } }
-  fire(x,y,z){ if(this.list.length>this.MAX) return;
-    const s=this._s(new THREE.SpriteMaterial({map:this.tex,color:new THREE.Color().setHSL(rand(0.02,0.1),1,0.55),
-      transparent:true,opacity:0.9,depthWrite:false,blending:THREE.AdditiveBlending}));
+  fire(x,y,z){ const s=this._s(_PCOL.setHSL(rand(0.02,0.1),1,0.55),0.9,THREE.AdditiveBlending); if(!s) return;
     s.position.set(x+rand(-0.3,0.3),y,z+rand(-0.3,0.3)); const sc=rand(0.6,1.1); s.scale.set(sc,sc,sc);
     this.list.push({s,life:rand(0.3,0.5),max:0.5,vx:rand(-0.4,0.4),vy:rand(2,3.4),vz:rand(-0.4,0.4),grow:-0.6,op:0.9}); }
   // big slow fireball blob (used for the rising mushroom)
-  fireball(x,y,z,scale,life){ if(this.list.length>this.MAX) return;
-    const s=this._s(new THREE.SpriteMaterial({map:this.tex,color:new THREE.Color().setHSL(rand(0.03,0.09),1,rand(0.45,0.6)),
-      transparent:true,opacity:0.95,depthWrite:false,blending:THREE.AdditiveBlending}));
+  fireball(x,y,z,scale,life){ const s=this._s(_PCOL.setHSL(rand(0.03,0.09),1,rand(0.45,0.6)),0.95,THREE.AdditiveBlending); if(!s) return;
     s.position.set(x,y,z); s.scale.set(scale,scale,scale);
     this.list.push({s,life,max:life,vx:rand(-0.6,0.6),vy:rand(1.0,2.2),vz:rand(-0.6,0.6),grow:scale*0.7,op:0.95}); }
-  debris(x,y,z,n){ for(let i=0;i<n;i++){ if(this.list.length>this.MAX) break;
-    const s=this._s(new THREE.SpriteMaterial({map:this.tex,color:0x1a1714,transparent:true,opacity:1,depthWrite:false}));
+  debris(x,y,z,n){ for(let i=0;i<n;i++){ const s=this._s(0x1a1714,1); if(!s) break;
     s.position.set(x,y,z); const sc=rand(0.25,0.6); s.scale.set(sc,sc,sc);
     this.list.push({s,life:rand(0.6,1.2),max:1.2,vx:rand(-9,9),vy:rand(4,11),vz:rand(-9,9),grow:0,op:1,grav:16}); } }
   // full explosion sequence: flash -> expanding fireball -> rising stem -> mushroom cap
@@ -1886,20 +2133,20 @@ class Particles{
     for(let k=0;k<10;k++) this.fireball(x+rand(-1.2,1.2),1.0+rand(0,1.4),z+rand(-1.2,1.2),rand(1.6,2.6),rand(0.5,0.9));
     // rising stem of fire/smoke, then a spreading cap a moment later
     const self=this;
-    for(let i=1;i<=5;i++) setTimeout(()=>{ const y=1.5+i*1.4;
+    for(let i=1;i<=5;i++) roundTimeout(()=>{ const y=1.5+i*1.4;
       self.fireball(x+rand(-0.5,0.5),y,z+rand(-0.5,0.5),rand(1.4,2.2),0.6);
       self.smoke(x+rand(-0.6,0.6),y,z+rand(-0.6,0.6),0.18); }, i*55);
-    setTimeout(()=>{ for(let k=0;k<16;k++){ const a=k/16*TAU, r=rand(1.5,3.4);   // the cap
+    roundTimeout(()=>{ for(let k=0;k<16;k++){ const a=k/16*TAU, r=rand(1.5,3.4);   // the cap
       self.smoke(x+Math.cos(a)*r, 8.5+rand(-0.6,0.6), z+Math.sin(a)*r, 0.16); }
       for(let k=0;k<6;k++) self.fireball(x+rand(-2,2),8.2,z+rand(-2,2),rand(2.0,3.0),0.7); }, 360);
     for(let k=0;k<10;k++) this.smoke(x+rand(-1.6,1.6),2.0,z+rand(-1.6,1.6),0.22);
   }
   update(dt){ for(let i=this.list.length-1;i>=0;i--){ const p=this.list[i]; p.life-=dt;
-    if(p.life<=0){ scene.remove(p.s); p.s.material.dispose(); this.list.splice(i,1); continue; }
+    if(p.life<=0){ this._free(p.s); this.list.splice(i,1); continue; }
     if(p.grav) p.vy-=p.grav*dt; p.s.position.x+=p.vx*dt; p.s.position.y+=p.vy*dt; p.s.position.z+=p.vz*dt;
     const sc=p.s.scale.x+p.grow*dt; if(sc>0.01) p.s.scale.set(sc,sc,sc);
     p.s.material.opacity=p.op*(p.life/p.max); } }
-  clear(){ for(const p of this.list){ scene.remove(p.s); p.s.material.dispose(); } this.list=[]; }
+  clear(){ for(const p of this.list) this._free(p.s); this.list=[]; }
 }
 let particles;
 
@@ -1908,6 +2155,9 @@ let particles;
    ==================================================================== */
 class Audio{
   constructor(){ this.ok=false; this.muted=false; this.vol=0.5; this.gear=0; this.shiftCd=0; this.lastEngT=0; }
+  // static bit-quantise transfer curve for the WaveShaper crushers (2^bits levels across [-1,1])
+  _crushCurve(bits){ const n=4096, step=2/Math.pow(2,bits), c=new Float32Array(n);
+    for(let i=0;i<n;i++){ const x=i/(n-1)*2-1; c[i]=Math.round(x/step)*step; } return c; }
   init(){ if(this.ok) return;
     try{ const AC=window.AudioContext||window.webkitAudioContext; this.ctx=new AC();
       this.master=this.ctx.createGain(); this.master.gain.value=this.muted?0:this.vol; this.master.connect(this.ctx.destination);
@@ -1942,17 +2192,10 @@ class Audio{
       this.crashReverbGain=this.ctx.createGain(); this.crashReverbGain.gain.value=0.5;
       // POST-REVERB mangle: a 2nd (harsher 4-bit) crusher, then a ring modulator whose freq is randomised
       // per hit, then drop the whole wet tail to ~1/10 of its level.
-      this.crush2=this.ctx.createScriptProcessor(512,2,2);
-      { const levels2=Math.pow(2,5), step2=2/levels2;                       // 5-bit (eased back from 4)
-        const rateDiv2=Math.max(1,Math.round(this.ctx.sampleRate/5200));
-        let hL=0,hR=0,cnt=0;
-        this.crush2.onaudioprocess=(e)=>{
-          const inL=e.inputBuffer.getChannelData(0), inR=e.inputBuffer.getChannelData(1);
-          const outL=e.outputBuffer.getChannelData(0), outR=e.outputBuffer.getChannelData(1);
-          for(let i=0;i<inL.length;i++){ if(cnt<=0){ cnt=rateDiv2; hL=inL[i]; hR=inR[i]; } cnt--;
-            outL[i]=Math.round(hL/step2)*step2; outR[i]=Math.round(hR/step2)*step2; }
-        };
-      }
+      // 5-bit quantiser as a native WaveShaper. The old ScriptProcessor version fired a main-thread JS
+      // callback ~90×/s forever (even in silence) and is deprecated; a static quantise curve runs on the
+      // audio thread for free. (The 5.2kHz decimation is dropped — inaudible at this stage's 0.025 gain.)
+      this.crush2=this.ctx.createWaveShaper(); this.crush2.curve=this._crushCurve(5);
       this.ringGain=this.ctx.createGain(); this.ringGain.gain.value=0;        // ring mod: multiply by a bipolar osc
       this.ringOsc=this.ctx.createOscillator(); this.ringOsc.type='square'; this.ringOsc.frequency.value=220;
       this.ringOsc.connect(this.ringGain.gain); this.ringOsc.start();
@@ -1969,25 +2212,13 @@ class Audio{
       this.windBP=this.ctx.createBiquadFilter(); this.windBP.type='bandpass'; this.windBP.frequency.value=600; this.windBP.Q.value=0.6;
       this.windGain=this.ctx.createGain(); this.windGain.gain.value=0;
       this.windSrc.connect(this.windBP); this.windBP.connect(this.windGain); this.windGain.connect(this.master); this.windSrc.start();
-      // --- gritty bitcrusher bus for the metal crash hits: 5-bit quantise + sample-rate decimation ---
-      // crushRate sits right in the band of the crash partials (baseF 440-700 x {1,2.76,5.4,8.9}) so the
-      // aliasing folds against them -> clangy, lo-fi grit instead of a clean hit.
-      this.crushBits=5; this.crushRate=7000;
+      // --- gritty bitcrusher bus for the metal crash hits: 5-bit quantise as a native WaveShaper ---
+      // (was a ScriptProcessor: deprecated + a perpetual main-thread callback. The quantise steps supply
+      // the lo-fi clang; the old 7kHz decimation aliasing is a minor loss for a big main-thread win.)
+      this.crushBits=5;
       this.crushIn=this.ctx.createGain();
-      this.crush=this.ctx.createScriptProcessor(512,2,2);
-      { const levels=Math.pow(2,this.crushBits), step=2/levels;
-        const rateDiv=Math.max(1,Math.round(this.ctx.sampleRate/this.crushRate));
-        let hL=0,hR=0,cnt=0;
-        this.crush.onaudioprocess=(e)=>{
-          const inL=e.inputBuffer.getChannelData(0), inR=e.inputBuffer.getChannelData(1);
-          const outL=e.outputBuffer.getChannelData(0), outR=e.outputBuffer.getChannelData(1);
-          for(let i=0;i<inL.length;i++){
-            if(cnt<=0){ cnt=rateDiv; hL=inL[i]; hR=inR[i]; }   // sample-and-hold (down-sample)
-            cnt--;
-            outL[i]=Math.round(hL/step)*step; outR[i]=Math.round(hR/step)*step;   // quantise to 5 bits
-          }
-        };
-        this.crushIn.connect(this.crush); this.crush.connect(this.master); }   // crushed direct path -> master (reverb tail stays clean)
+      this.crush=this.ctx.createWaveShaper(); this.crush.curve=this._crushCurve(this.crushBits);
+      this.crushIn.connect(this.crush); this.crush.connect(this.master);   // crushed direct path -> master (reverb tail stays clean)
       this.ok=true;
     }catch(e){ this.ok=false; } }
   engine(speed,throttle,airborne,pitch,lump){ if(!this.ok||this.muted) return; const t=this.ctx.currentTime;
@@ -2022,7 +2253,8 @@ class Audio{
     if(this.engModOsc) this.engModOsc.frequency.setTargetAtTime(f*1.5,t,0.05);               // AM rate tracks RPM
     if(this.engModDepth) this.engModDepth.gain.setTargetAtTime(lump+Math.max(0,throttle)*0.18,t,0.1);
     this.engFilter.frequency.setTargetAtTime(filt,t,0.1);
-    const g = airborne ? (throttle>0?0.10:0.045) : (0.05+Math.min(speed/35,1)*0.06);
+    // engine LOAD: louder under throttle, settles back on a coast — reads as real drivetrain strain
+    const g = airborne ? (throttle>0?0.10:0.045) : (0.045+Math.min(speed/35,1)*0.05+Math.max(0,throttle)*0.035);
     this.engGain.gain.setTargetAtTime(g,t,0.1); }
   wind(speed){ if(!this.ok||this.muted||!this.windGain) return; const t=this.ctx.currentTime;
     this.windGain.gain.setTargetAtTime(clamp((speed-8)/40,0,1)*0.05,t,0.25);
@@ -2064,7 +2296,7 @@ class Audio{
   screech(amt){ if(!this.ok) return; this.scrGain.gain.setTargetAtTime((this.muted?0:1)*clamp(amt,0,1)*0.09, this.ctx.currentTime, 0.05); }
   crashBurst(intensity, panv){ if(!this.ok||this.muted) return; intensity=clamp(intensity,0,1);
     const n=3+Math.floor(intensity*3);                                  // cluster of clangs ~50ms apart, fading out
-    for(let i=0;i<n;i++){ const k=i; setTimeout(()=>this.crash(intensity*Math.pow(0.6,k), (panv||0)+rand(-0.12,0.12)), k*50); } }
+    for(let i=0;i<n;i++){ const k=i; roundTimeout(()=>this.crash(intensity*Math.pow(0.6,k), (panv||0)+rand(-0.12,0.12)), k*50); } }
   // sharp little backfire pop when a dying engine sputters
   backfire(){ if(!this.ok||this.muted||Game.state!=='playing') return; const t=this.ctx.currentTime;
     const src=this.ctx.createBufferSource(); src.buffer=this.noiseBuf;
@@ -2170,9 +2402,18 @@ function wallCollide(c){            // derby circular wall
   c.vx+=c.invMass*px; c.vz+=c.invMass*pz; c.omega-=c.invInertia*crossY(rx,rz,px,pz);  // flipped: clockwise-positive yaw convention
   return Math.abs(vn);
 }
+// Local outward widening of the drivable area for the tow bay (a layby). Smooth bump centred on the pullout,
+// so the track "gets wider" right where the yard sits and tapers back to normal at each end — giving the tow
+// truck room to pull off the racing line and to swing back onto it. Bay lives on the OUTER (+normal) side.
+function pulloutBulge(u){
+  const B=Game.pullout&&Game.pullout.bay; if(!B) return 0;
+  let d=((u-B.u)%1+1.5)%1-0.5; d=Math.abs(d);         // wrapped distance in normalised lap units
+  if(d>=B.halfU) return 0;
+  const t=1-d/B.halfU; return B.depth*(t*t*(3-2*t));  // smoothstep: 0 at the bay ends → depth at its centre
+}
 function trackClampBody(o,margin){  // hard outer wall: race track wall, or (city) the buildings beyond the sidewalk
   const pr=Course.project(o.x,o.z);
-  const lat=pr.lateral, lim=Course.halfW+Course.sidewalk-margin;
+  const lat=pr.lateral, lim=Course.halfW+Course.sidewalk-margin + (lat>0?pulloutBulge(pr.u):0);   // widen inside the tow bay
   if(Math.abs(lat)<=lim) return 0;
   const sign=lat>0?1:-1, over=Math.abs(lat)-lim;
   o.x-=pr.nx*sign*over; o.z-=pr.nz*sign*over;
@@ -2183,9 +2424,10 @@ function trackClampBody(o,margin){  // hard outer wall: race track wall, or (cit
 // city sidewalk curb: lift the car ~0.06 up when its centre is over the 1-car-wide sidewalk strip
 const CURB_H=0.06;
 function cityCurb(c){
-  const al=Math.abs(Course.project(c.x,c.z).lateral);
-  if(al < Course.halfW) c.groundY=0;                              // road
-  else if(al < Course.halfW+Course.sidewalk) c.groundY=CURB_H;    // raised sidewalk
+  const pr=c._proj||Course.project(c.x,c.z); const al=Math.abs(pr.lateral);   // reuse the per-frame projection
+  const b=pr.lateral>0?pulloutBulge(pr.u):0;                      // the tow bay is widened flat road on the +side
+  if(al < Course.halfW+b) c.groundY=0;                            // road (incl. the widened bay)
+  else if(al < Course.halfW+Course.sidewalk+b) c.groundY=CURB_H;  // raised sidewalk
   else c.groundY=-0.5;                                            // off-road grass (sits on the ground plane)
 }
 // buildings are SOLID barriers: push the car out of any building's oriented footprint (treated like a wall).
@@ -2266,8 +2508,14 @@ const Game={ state:'menu', round:1, levelType:'derby', cars:[], player:null,
   score:0, levelHits:0, levelWrecks:0, levelFatalities:0, wrongTimer:0, lastBreakdown:null,
   camSign:1, camRev:false, night:false, dirtTrack:false, gripMult:1, lives:3, playerVehicle:'car',
   cash:0, upgrades:Object.fromEntries(PLAYER_TYPES.map(k=>[k,{engine:0,armor:0,ram:0,grip:0}])),
-  difficulty:'normal', diff:DIFFICULTY.normal, volume:0.5, progScale:1 };
+  difficulty:'normal', diff:DIFFICULTY.normal, volume:0.5, progScale:1,
+  towTruck:null, pullout:{x:0,z:0,angle:0}, _timers:[] };
 const input={ throttle:0, steer:0, rawSteer:0, hand:false }; const keys={};
+// Round-scoped timers: anything deferred with setTimeout during a round (explosion particles, crash-sound
+// cascades, the win/lose overlay delay) is registered here and cancelled in startRound, so a blast or a
+// pending overlay from the old round can never leak into the freshly-built next one.
+function roundTimeout(fn,ms){ const id=setTimeout(()=>{ const i=Game._timers.indexOf(id); if(i>=0)Game._timers.splice(i,1); fn(); }, ms); Game._timers.push(id); return id; }
+function clearRoundTimeouts(){ for(const id of Game._timers) clearTimeout(id); Game._timers.length=0; }
 
 /* ---------------- career / settings persistence (localStorage) ---------------- */
 const SAVE_KEY='bentMetalDerbySave';
@@ -2352,6 +2600,7 @@ function spawnPowerups(){
 }
 
 function startRound(r){
+  clearRoundTimeouts();   // cancel any explosion/crash/overlay timers still pending from the previous round
   // clear any lingering popovers BEFORE the new scene is built/rendered (e.g. a FATALITY from the last frame of the old level)
   { const ff=$('fatality'); ff.classList.remove('show'); ff.style.opacity=0;
     const bn=$('banner'); bn.style.opacity=0; clearTimeout(banner._t);
@@ -2361,7 +2610,7 @@ function startRound(r){
   if(particles) particles.clear();
   if(skidMarks) skidMarks.reset();
   levelGroup.clear();
-  Game.cars=[]; Game.ramps=[]; Game.barrels=[]; Game.tires=[]; Game.floods=[]; Game.powerups=[]; Game.cityBuildings=[]; Game.trees=[]; Game.poleSpots=[]; Game.roadMat=null;
+  Game.cars=[]; Game.ramps=[]; Game.barrels=[]; Game.tires=[]; Game.floods=[]; Game.powerups=[]; Game.cityBuildings=[]; Game.trees=[]; Game.poleSpots=[]; Game.roadMat=null; Game.towTruck=null;
   // each round is a RANDOM arena type (reload to re-roll until you get the one you want)
   Game.round=r; Game.levelType = ['derby','race','city'][Math.floor(Math.random()*3)];
   Game.levelHits=0; Game.levelWrecks=0; Game.levelFatalities=0; Game.wrongTimer=0;
@@ -2371,7 +2620,7 @@ function startRound(r){
   Game.dirtTrack = (Game.levelType==='race') && Math.random()<0.45;   // some race levels are loose dirt ovals
   Game.gripMult = Game.dirtTrack ? 0.72 : 1.0;           // dirt = less grip, more sliding
   if(groundMesh){ groundMesh.material.map = Game.dirtTrack ? groundDirtTex : grassTex; groundMesh.material.needsUpdate=true; }
-  if(r===1){ Game.score=0; Game.lives=3; Game.progScale=1; }  // fresh game
+  if(r===1){ Game.score=0; Game.lives=3; }  // fresh game (progScale is recomputed unconditionally just below)
   // progressive difficulty: every 3 rounds enemies get a touch faster/harder
   // tier 0 = rounds 1-3 (×1.0), tier 1 = rounds 4-6 (×1.07), etc.
   Game.progScale = 1 + Math.floor((r-1)/3) * 0.07;
@@ -2403,6 +2652,12 @@ function startRound(r){
     }
     Game.cars.push(car); if(isP) Game.player=car;
   }
+  // spawn tow truck parked at the pullout — it drives out to retrieve dead cars between retrievals
+  { const tow=new Car(0xffaa00,false,'TOW','tow');
+    tow.isTow=true;
+    tow.towState={mode:'idle',target:null,hookDist:6.5,idleTimer:2};
+    tow.reset(Game.pullout.x,Game.pullout.z,Game.pullout.angle);
+    Game.cars.push(tow); Game.towTruck=tow; }
   Game.state='countdown'; Game.countdown=3.2; Game.countLast=null; Game.elapsed=0;
   const modeName = Game.levelType==='derby'?'DERBY' : Game.levelType==='city'?'CITY' : 'RACE';
   document.getElementById('roundLabel').textContent = 'ROUND '+r+' · '+modeName;
@@ -2415,31 +2670,53 @@ function startRound(r){
        : Game.levelType==='city'  ? 'CITY · 3 LAPS'
        : ((Game.dirtTrack?'DIRT RACE':'RACE')+' · 3 LAPS'), sub);
 }
-function aliveCars(){ return Game.cars.filter(c=>c.alive); }
+function aliveCars(){ return Game.cars.filter(c=>c.alive && !c.isTow); }   // the tow truck is a service vehicle, not a competitor — don't count it
 
 /* ---------------- AI ---------------- */
 function pickTarget(c){
   let best=null,bd=Infinity;
-  for(const o of Game.cars){ if(o===c||!o.alive) continue; let d=Math.hypot(o.x-c.x,o.z-c.z); if(o.isPlayer) d*=0.85; if(d<bd){bd=d;best=o;} }
+  for(const o of Game.cars){ if(o===c||!o.alive||o.isTow) continue; let d=Math.hypot(o.x-c.x,o.z-c.z);
+    if(o.isPlayer) d*=0.85;
+    d*=0.7+0.6*(o.health/o.maxHealth);   // predators hunt the wounded: a crippled car reads as a closer target
+    if(d<bd){bd=d;best=o;} }
   return best;
 }
-// deadlock recovery: if an AI car is dogpiled (under 10 mph for 4s+), it grabs control and drives a random
-// direction — random steer + random forward/back — for 4 seconds, then releases back to the normal AI and
-// starts watching again. Returns a control object while recovering, else null.
+// deadlock recovery: if an AI car is dogpiled (under 10 mph for 4s+), it runs an INFORMED two-phase
+// escape instead of the old random flailing: ~1.8s reversing while swinging the nose toward open space
+// (arena centre in the derby; along-track-and-inward on a circuit), then ~2.2s driving out toward it.
 const STUCK_SPEED = 10/2.237;   // 10 mph in m/s
+function openSpaceDir(c){        // unit vector toward the most escapable open ground from c's position
+  if(Game.levelType==='derby'){ const d=Math.hypot(c.x,c.z)||1; return [-c.x/d,-c.z/d]; }   // toward the pit centre
+  const pr=Course.project(c.x,c.z), away=pr.lateral>0?-1:1;
+  const w=clamp(Math.abs(pr.lateral)/(Course.halfW||15),0,1);           // pinned against a wall -> bias hard inward
+  let ox=pr.tx+pr.nx*away*w*1.2, oz=pr.tz+pr.nz*away*w*1.2;
+  const l=Math.hypot(ox,oz)||1; return [ox/l,oz/l];
+}
 function aiStuckRecovery(c,dt){
   if(c.recoverT>0){
     c.recoverT-=dt;
-    if(c.recoverT<=0){ c.stuckT=0; return null; }              // 4s elapsed -> release control, resume watching
-    return {throttle:c.recoverThrottle, steer:c.recoverSteer, hand:false};
+    if(c.recoverT<=0){ c.stuckT=0; c.recoverCd=10; return null; }   // done -> hand back to AI, start a 10s cooldown
+    const [ox,oz]=openSpaceDir(c);
+    const desired=Math.atan2(ox,oz); let diff=desired-c.angle;
+    while(diff>Math.PI)diff-=TAU; while(diff<-Math.PI)diff+=TAU;
+    if(c.recoverT>2.2) return {throttle:-1, steer:clamp(-diff*1.5,-1,1), hand:false};   // phase 1: back out (dir=-1 flips steer, so -diff swings the nose TOWARD open space)
+    return {throttle:1, steer:clamp(diff*1.6,-1,1), hand:false};                        // phase 2: drive out
   }
-  if(c.speed < STUCK_SPEED) c.stuckT+=dt; else c.stuckT=0;     // watch for a sustained low-speed jam
-  if(c.stuckT>=4.0){ c.stuckT=0; c.recoverT=4.0;               // kick off a 4s escape
-    c.recoverSteer    = Math.random()<0.5 ? -1 : 1;            // random direction to steer
-    c.recoverThrottle = Math.random()<0.5 ? -1 : 1;            // random forward or backward
-    return {throttle:c.recoverThrottle, steer:c.recoverSteer, hand:false};
-  }
+  // hard cooldown: after the escape the car is pointed a new way, so let the AI actually drive for 10s
+  // before it's allowed to declare "stuck" again (stops the recover→recover→recover thrash loop).
+  if(c.recoverCd>0){ c.recoverCd-=dt; c.stuckT=0; return null; }
+  if(c.speed < (c.stuckSpeed||STUCK_SPEED)) c.stuckT+=dt; else c.stuckT=0;   // per-car threshold: sustained low-speed jam
+  if(c.stuckT>=4.0){ c.stuckT=0; c.recoverT=4.0; }             // kick off the 4s escape (controls computed above next frame)
   return null;
+}
+// Slew-rate limit an AI steering command. When two steering influences disagree (line-follow vs ram nudge,
+// seek vs wall/ramp avoidance) the raw command can flip sign every frame and the wheels visibly jitter.
+// Capping how fast steering may change per second lets the influences blend into one smooth motion.
+function aiSteer(c, steer, dt){
+  const maxD = 9*dt;                       // ~full lock-to-lock in 0.22s: responsive, but no single-frame snap
+  if(c._steer==null) c._steer=steer;
+  c._steer += clamp(steer-c._steer, -maxD, maxD);
+  return c._steer;
 }
 function driveDerbyAI(c,dt){
   const rec=aiStuckRecovery(c,dt); if(rec) return rec;
@@ -2454,6 +2731,7 @@ function driveDerbyAI(c,dt){
   const cd=Math.hypot(c.x,c.z);
   if(cd>WALL_R-12){ const toC=Math.atan2(-c.x,-c.z); let d2=toC-c.angle; while(d2>Math.PI)d2-=TAU; while(d2<-Math.PI)d2+=TAU;
     ctrl.steer=clamp(ctrl.steer*0.3+d2*1.4,-1,1); if(cd>WALL_R-4) ctrl.throttle=Math.max(ctrl.throttle,0.5); }
+  ctrl.steer=aiSteer(c,ctrl.steer,dt);
   return ctrl;
 }
 function driveRaceAI(c,dt){
@@ -2469,17 +2747,17 @@ function driveRaceAI(c,dt){
   // In the tight city we ease this WAY off — hard shoving just bounced rivals into the buildings.
   const ramScale = (Game.levelType==='city') ? 0.45 : 1.0;
   let best=null,bd=1e9;
-  for(const o of Game.cars){ if(o===c||!o.alive) continue; const d=(o.x-c.x)**2+(o.z-c.z)**2; if(d<bd){bd=d;best=o;} }
+  for(const o of Game.cars){ if(o===c||!o.alive||o.isTow) continue; const d=(o.x-c.x)**2+(o.z-c.z)**2; if(d<bd){bd=d;best=o;} }
   if(best && bd<210){
     const rdx=best.x-c.x, rdz=best.z-c.z;
     const fwd =Math.sin(c.angle)*rdx+Math.cos(c.angle)*rdz;     // ahead(+)/behind(-)
     const side=Math.cos(c.angle)*rdx-Math.sin(c.angle)*rdz;     // right(+)/left(-)
-    const sgn = side>=0?1:-1;
-    if(Math.abs(fwd)<4.8 && Math.abs(side)<5)            steer += sgn*0.35*ramScale;  // alongside -> push them toward the wall
-    else if(fwd>2 && fwd<11 && Math.abs(side)<5.5)        steer += sgn*0.18*ramScale;  // just ahead -> lean in to ram/overtake
-    else if(fwd<-1.5 && fwd>-12 && Math.abs(side)<7)      steer += sgn*0.22*ramScale;  // behind & passing -> move across to block
+    const ss = clamp(side*0.5,-1,1);   // smooth side sign: ±1 when clearly to one side, fades through 0 dead-ahead (no per-frame flip)
+    if(Math.abs(fwd)<4.8 && Math.abs(side)<5)            steer += ss*0.35*ramScale;  // alongside -> push them toward the wall
+    else if(fwd>2 && fwd<11 && Math.abs(side)<5.5)        steer += ss*0.18*ramScale;  // just ahead -> lean in to ram/overtake
+    else if(fwd<-1.5 && fwd>-12 && Math.abs(side)<7)      steer += ss*0.22*ramScale;  // behind & passing -> move across to block
   }
-  steer=clamp(steer,-1,1);
+  steer=aiSteer(c, clamp(steer,-1,1), dt);
   let throttle = c.finished ? 0.25 : clamp(1-Math.abs(diff)*0.12, 0.62, 1)*c.ai.aggro;
   // corner braking: only scrub for genuinely sharp bends, and not by much — a well-steered car can carry
   // most corners near top speed, so the field stays fast & competitive (no deliberate overshoots anymore)
@@ -2492,12 +2770,133 @@ function driveRaceAI(c,dt){
   return { steer, throttle, hand:false };
 }
 
+// Steer the tow truck AROUND ramps in its path (it's heavy and low-power, so climbing one strands it).
+// For each ramp roughly ahead and close, nudge the steering to the side and ease off the throttle.
+function towAvoidRamps(c,ctrl){
+  let near=null, nd=1e9, ndiff=0, nreach=0;
+  for(const r of Game.ramps){
+    const dx=r.x-c.x, dz=r.z-c.z, d=Math.hypot(dx,dz), reach=r.halfW+6;   // ~11 units out
+    if(d>reach || d<0.1) continue;
+    let diff=Math.atan2(dx,dz)-c.angle; while(diff>Math.PI)diff-=TAU; while(diff<-Math.PI)diff+=TAU;
+    if(Math.abs(diff)>1.3) continue;                       // ramp is beside/behind us, not in the way
+    if(d<nd){ nd=d; near=r; ndiff=diff; nreach=reach; }
+  }
+  if(!near){ c.avoidDir=0; return; }                       // path clear -> forget the committed side
+  if(!c.avoidDir) c.avoidDir = ndiff>=0 ? -1 : 1;          // commit ONCE to a turn-away side, hold it until clear (no dead-ahead flip)
+  const urgency=1-nd/nreach;                               // 0 far → 1 almost on it
+  ctrl.steer=clamp(ctrl.steer + c.avoidDir*urgency*1.15, -1, 1);
+  if(nd<nreach*0.6) ctrl.throttle=Math.min(ctrl.throttle,0.35);          // ease off while skirting it
+}
+// Tow truck state machine — runs each render frame, returns a ctrl object.
+// States: 'idle' (parked / waiting), 'pickup' (driving to dead car), 'towing' (dragging it back).
+function driveTowAI(c,dt){
+  const ts=c.towState;
+  // Release the current target back to the world: clears beingTowed so the wreck is wall-clamped again and
+  // can be re-acquired later. MUST run on every exit path — the old code leaked the flag when a pickup was
+  // abandoned, permanently freezing that wreck out of collisions and out of the tow queue.
+  const drop=()=>{ if(ts.target) ts.target.beingTowed=false; ts.target=null; };
+
+  // Only watch for "stuck" while the tow is actually trying to GO somewhere: chasing/towing a wreck, or
+  // driving back to the pullout from a distance. When it's parked & idling at the pullout its speed is ~0 by
+  // design, so watching there would (and did) fire recovery and make it do donuts instead of sitting still.
+  const dPull=Math.hypot(c.x-Game.pullout.x, c.z-Game.pullout.z);
+  const drivingSomewhere = (ts.mode==='pickup' || ts.mode==='towing') || (ts.mode==='idle' && dPull>7);
+  // stuck recovery: reverse-and-turn out of a jam (same pattern as the racing AI, tow-appropriate thresholds)
+  if(c.recoverT>0){ c.recoverT-=dt; if(c.recoverT<=0){ c.stuckT=0; c.recoverCd=10; }   // done -> 10s cooldown before it may retrigger
+    else return {throttle:c.recoverThrottle,steer:c.recoverSteer,hand:false}; }
+  if(c.recoverCd>0){ c.recoverCd-=dt; c.stuckT=0; }                        // cooldown: let the tow drive off in its new heading
+  else if(!drivingSomewhere){ c.stuckT=0; }                               // parked/idling at the pullout -> not stuck
+  else {
+    if(c.speed<(c.stuckSpeed||STUCK_SPEED)) c.stuckT+=dt; else c.stuckT=0;   // per-car threshold (the heavy tow crawls slow normally)
+    if(c.stuckT>=3.5){ c.stuckT=0; c.recoverT=4.0;
+      c.recoverSteer=Math.random()<0.5?-1:1; c.recoverThrottle=Math.random()<0.5?-1:1;
+      return {throttle:c.recoverThrottle,steer:c.recoverSteer,hand:false}; }
+  }
+
+  const ctrl={throttle:0,steer:0,hand:false};
+  // steer c toward world point (tx,tz) at a fraction of full throttle; returns distance.
+  function steerTo(tx,tz,topThrottle){
+    const dx=tx-c.x, dz=tz-c.z, dist=Math.hypot(dx,dz);
+    if(dist<1.8){ ctrl.throttle=0; return dist; }
+    const desired=Math.atan2(dx,dz); let diff=desired-c.angle;
+    while(diff>Math.PI)diff-=TAU; while(diff<-Math.PI)diff+=TAU;
+    ctrl.steer=clamp(diff*1.6,-1,1);
+    if(Math.abs(diff)>2.0&&dist<16) ctrl.throttle=-0.28;  // reverse-then-turn to realign
+    else ctrl.throttle=clamp((1-Math.abs(diff)*0.28)*topThrottle, 0.08, topThrottle);
+    return dist;
+  }
+  // FOLLOW THE TRACK toward (tx,tz) at an outer offset — off the racing line but inside the tyres/walls — so
+  // the heavy tow doesn't cut straight across corners into walls. Aims at a look-ahead point on the outer lane,
+  // taking the shorter way round the loop. Returns straight-line distance to the real target.
+  function towTrackSteer(tx,tz,topThrottle){
+    const prC=Course.project(c.x,c.z);
+    const look=(Course.mode==='polar')?0.024:Math.min(0.08,12/Course.total);
+    const a=Course.at(prC.u+look);                                        // ALWAYS look ahead in the racing direction:
+                                                                          // circulate with traffic (no U-turns, no head-ons)
+    const off=Course.halfW-6;                                             // outer lane: off the racing line, real margin from the tyres
+    const ax=a.cx+a.nx*off, az=a.cz+a.nz*off;
+    const dx=ax-c.x, dz=az-c.z; let desired=Math.atan2(dx,dz); let diff=desired-c.angle;
+    while(diff>Math.PI)diff-=TAU; while(diff<-Math.PI)diff+=TAU;
+    ctrl.steer=clamp(diff*1.6,-1,1);
+    ctrl.throttle=clamp((1-Math.abs(diff)*0.25)*topThrottle, 0.5, topThrottle);   // keep it moving so it never crawls below its stuck-speed
+    return Math.hypot(tx-c.x, tz-c.z);
+  }
+  // In the open derby pit, or once we're within ~16 units, drive STRAIGHT in (hook up / peel into the bay).
+  // On a race/city/dirt loop while still far, follow the track instead of cutting across it.
+  function navigate(tx,tz,topThrottle){
+    const dist=Math.hypot(tx-c.x, tz-c.z);
+    if(Game.levelType==='derby' || dist<16) return steerTo(tx,tz,topThrottle);
+    return towTrackSteer(tx,tz,topThrottle);
+  }
+  const towable=o=>!o.alive&&!o.isTow&&!o.beingTowed&&o.mesh&&o.mesh.visible;
+  switch(ts.mode){
+    case 'idle':{
+      ts.idleTimer=(ts.idleTimer||0)-dt;
+      if(ts.idleTimer>0){ navigate(Game.pullout.x,Game.pullout.z,0.30); break; }
+      // pick the NEAREST towable wreck (old code took the first in list order → long pointless drives)
+      let best=null,bd=1e18;
+      for(const o of Game.cars){ if(!towable(o)) continue; const d=(o.x-c.x)**2+(o.z-c.z)**2; if(d<bd){ bd=d; best=o; } }
+      if(best){ ts.target=best; ts.mode='pickup'; ts.idleTimer=0; ts.pickupT=0; }
+      else{ ts.idleTimer=0.8; navigate(Game.pullout.x,Game.pullout.z,0.30); }
+      break; }
+    case 'pickup':{
+      ts.pickupT=(ts.pickupT||0)+dt;
+      // give up (and release the wreck) if it vanished or we've been chasing too long without hooking up
+      if(!ts.target||!ts.target.mesh||!ts.target.mesh.visible||ts.pickupT>40){ drop(); ts.mode='idle'; ts.idleTimer=0.5; break; }
+      const dist=navigate(ts.target.x,ts.target.z,0.85);           // follow the track until close, then straight in
+      if(dist<7.5){ ts.target.beingTowed=true; ts.mode='towing'; }   // only NOW take over its position/clamping
+      break; }
+    case 'towing':{
+      if(!ts.target){ ts.mode='idle'; ts.idleTimer=0.8; break; }     // safety: target lost somehow
+      // drag the dead car behind — position is overridden in the game loop AFTER physicsStep
+      const dist=navigate(Game.pullout.x,Game.pullout.z,0.70);     // follow the track back, then peel into the bay
+      if(dist<6){
+        // arrived — hide the wreck, kill its fire/smoke (no plume left floating in the yard) and release it
+        if(ts.target.mesh) ts.target.mesh.visible=false;
+        if(ts.target.blob) ts.target.blob.visible=false;
+        ts.target.burning=false; ts.target.exploded=true;   // stop fire particles + the pending explosion
+        drop(); ts.mode='idle'; ts.idleTimer=1.2;
+      }
+      break; }
+  }
+  if(Game.ramps.length) towAvoidRamps(c,ctrl);   // route around ramps (it can't climb them without stranding)
+  ctrl.steer=aiSteer(c,ctrl.steer,dt);           // same slew limit as the other AI so the wheels don't jitter
+  return ctrl;
+}
+
 /* ---------------- physics tick ---------------- */
+const _thisPairs=new Map();     // reused each tick (cleared, not reallocated) — physics runs up to 6×/frame
 function physicsStep(dt,controls){
   if(Game.levelType==='city') for(const c of Game.cars) cityCurb(c);   // set curb height before integrating
   for(let i=0;i<Game.cars.length;i++) Game.cars[i].step(dt,controls[i]);
+  // glue the towed wreck directly behind the truck EVERY substep (not once per frame) so it can't drift on
+  // its own decaying velocity between substeps — it's exempt from clamping below, so this is its only mover.
+  { const tw=Game.towTruck, ts=tw&&tw.towState;
+    if(ts && ts.mode==='towing' && ts.target){
+      ts.target.x=tw.x-Math.sin(tw.angle)*ts.hookDist; ts.target.z=tw.z-Math.cos(tw.angle)*ts.hookDist;
+      ts.target.vx=tw.vx; ts.target.vz=tw.vz; } }
 
-  const _thisPairs=new Map();  // pairs in contact this tick (keyed by sorted id string)
+  _thisPairs.clear();          // pairs in contact this tick (keyed by sorted id string)
   for(let iter=0;iter<3;iter++){
     for(let i=0;i<Game.cars.length;i++) for(let k=i+1;k<Game.cars.length;k++){
       const A=Game.cars[i],B=Game.cars[k];
@@ -2516,6 +2915,7 @@ function physicsStep(dt,controls){
     }
     // boundary: derby = round wall, race = track wall, city = buildings are the barriers (off-road is open grass)
     for(const c of Game.cars){
+      if(c.beingTowed) continue;                                  // tow truck controls position; skip clamping
       let cs = (Game.levelType==='derby') ? wallCollide(c)
                : (Game.levelType==='city')  ? (cityFarBound(c), cityBuildingCollide(c))
                : trackClampBody(c,1.4);
@@ -2564,7 +2964,7 @@ function physicsStep(dt,controls){
   // clear stale state for pairs that are no longer in contact
   for(const pk of _pairGrind.keys())  if(!_thisPairs.has(pk)) _pairGrind.delete(pk);
   for(const [pk,cd] of _pairHitCd)    if(!_thisPairs.has(pk) && cd<=0) _pairHitCd.delete(pk);
-  for(const b of Game.barrels){ b.step(dt); collideBarrel(b); }
+  for(const b of Game.barrels){ b.step(dt); if(Game.ramps.length) barrelRampCollide(b); collideBarrel(b); }
   for(const pu of Game.powerups) pu.step(dt);
 }
 
@@ -2631,7 +3031,9 @@ function rampInteract(c){
 }
 // tyre bumpers: a hard rubber bounce — kick the car back out, away from the tyre centre,
 // keeping ~half its speed (springy, no damage)
+const TIRE_TOP=1.0;                               // tyres lie flat (~0.9 tall); clear them once airborne above this
 function tireBounce(c){
+  if(c.y>TIRE_TOP) return;                        // jumped above the tyre stack -> no collision, sail over it
   const R=2.55;                                   // contact radius (tyre body + car overhang)
   for(const ti of Game.tires){ const dx=c.x-ti.x, dz=c.z-ti.z, d2=dx*dx+dz*dz;
     if(d2>=R*R || d2<1e-6) continue;
@@ -2646,6 +3048,25 @@ function tireBounce(c){
       c.vx=tvx*0.5+nx*out; c.vz=tvz*0.5+nz*out;
       if(c.isPlayer && speed>5){ Game.shake=Math.max(Game.shake,clamp(speed/40,0.1,0.4)); audio.crash(clamp(speed/34,0,0.5)); }
     }
+  }
+}
+// Keep barrels from being shoved INSIDE a ramp: if a barrel's centre sits within the ramp footprint and
+// below the slope surface there, eject it out the nearest face (front/back/side). Barrels stay on the
+// ground, so this simply stops them clipping into the solid wedge.
+function barrelRampCollide(b){
+  const pad=b.r+0.5;
+  for(const r of Game.ramps){
+    const Fx=Math.sin(r.angle),Fz=Math.cos(r.angle), Rx=Math.cos(r.angle),Rz=-Math.sin(r.angle);
+    const dx=b.x-r.x, dz=b.z-r.z; const lz=dx*Fx+dz*Fz, lx=dx*Rx+dz*Rz;
+    const halfL=r.halfL+pad, halfW=r.halfW+pad;
+    if(lx<=-halfW||lx>=halfW||lz<=-halfL||lz>=halfL) continue;      // outside footprint
+    const slopeH=r.H*clamp((lz+r.halfL)/(2*r.halfL),0,1);           // ramp surface height here
+    if(b.y >= slopeH-0.1) continue;                                 // sitting on/above the slope -> fine
+    const dFront=lz+halfL, dBack=halfL-lz, dSide=halfW-Math.abs(lx);
+    const m=Math.min(dFront,dBack,dSide);
+    if(m===dFront){ b.x-=Fx*dFront; b.z-=Fz*dFront; const vn=b.vx*Fx+b.vz*Fz; if(vn>0){b.vx-=Fx*vn;b.vz-=Fz*vn;} }
+    else if(m===dBack){ b.x+=Fx*dBack; b.z+=Fz*dBack; const vn=b.vx*Fx+b.vz*Fz; if(vn<0){b.vx-=Fx*vn;b.vz-=Fz*vn;} }
+    else { const s=lx>0?1:-1; b.x+=Rx*s*dSide; b.z+=Rz*s*dSide; const vn=(b.vx*Rx+b.vz*Rz)*s; if(vn<0){b.vx-=Rx*s*vn;b.vz-=Rz*s*vn;} }
   }
 }
 function collideBarrel(b){
@@ -2736,26 +3157,30 @@ function updateDrift(dt){
   }
 }
 function updateRaceProgress(){
+  const p=Game.player; let pu=null;
   for(const c of Game.cars){
+    if(c.isTow || !c.alive) continue;                    // the tow truck isn't racing; frozen wrecks don't advance
     const u=Course.project(c.x,c.z).u; let d=u-c.prevU; if(d>0.5)d-=1; if(d<-0.5)d+=1;   // normalised lap units
     c.cumU+=d; c.prevU=u; c.laps=Math.max(0,Math.floor(c.cumU));
     if(c.cumU>=Course.laps) c.finished=true;
+    if(c===p) pu=u;                                       // reuse the player's single projection below (no re-project)
   }
-  // wrong-way warning for the player
-  const p=Game.player;
-  if(p.alive && p.speed>5){ const u=Course.project(p.x,p.z).u; let d=u-p.prevUWarn; if(d>0.5)d-=1; if(d<-0.5)d+=1;
-    Game.wrongTimer = d<-0.00013 ? Game.wrongTimer+0.016 : 0; }
-  p.prevUWarn=Course.project(p.x,p.z).u;
-  document.getElementById('wrongway').style.opacity = (Game.wrongTimer>0.5 && !p.finished)?1:0;
+  // wrong-way warning for the player (uses the projection already computed in the loop)
+  if(pu!=null){
+    if(p.speed>5){ let d=pu-p.prevUWarn; if(d>0.5)d-=1; if(d<-0.5)d+=1;
+      Game.wrongTimer = d<-0.00013 ? Game.wrongTimer+0.016 : 0; }
+    p.prevUWarn=pu;
+  }
+  document.getElementById('wrongway').style.opacity = (Game.wrongTimer>0.5 && p.alive && !p.finished)?1:0;
 }
 function progress(c){ return c.cumU; }
-function playerPlace(){ return 1 + Game.cars.filter(c=>c!==Game.player && progress(c)>progress(Game.player)).length; }
+function playerPlace(){ return 1 + Game.cars.filter(c=>c!==Game.player && !c.isTow && (c.alive||c.finished) && progress(c)>progress(Game.player)).length; }   // wrecked-and-never-finished rivals don't outplace you
 function ordinal(n){ return n===1?'1ST':n===2?'2ND':n===3?'3RD':n+'TH'; }
 
 function checkLevelEnd(){
   if(Game.state!=='playing') return;
   if(!Game.player.alive){ endGameOver(); return; }
-  const aliveOthers=Game.cars.filter(c=>c!==Game.player && c.alive);
+  const aliveOthers=Game.cars.filter(c=>c!==Game.player && c.alive && !c.isTow);
   if(Game.levelType==='derby'){
     if(aliveOthers.length===0) completeLevel(1,1,true,'LAST CAR RUNNING',WIN_BONUS,true);
   }else{
@@ -2783,10 +3208,11 @@ function completeLevel(place,mult,won,title,bonus,standing){
   Game.lastBreakdown={ place,mult,won,title,earned,bonus,banked,standing,freeLife,cashEarned, drift:Game.levelDrift,
     hits:Game.levelHits,wrecks:Game.levelWrecks,fatalities:Game.levelFatalities,
     race:(Game.levelType!=='derby'), raceLoss };
-  if(raceLoss){ banner('RACE LOST',''); setTimeout(showLose,600); }
-  else{ banner(won?'WINNER! +1 LIFE':title,''); setTimeout(showWin,won?900:600); }
+  // hold the result banner for 3s so it's clearly read before the win/lose overlay draws over the scene
+  if(raceLoss){ banner('RACE LOST','',3000); roundTimeout(showLose,3000); }
+  else{ banner(won?'WINNER! +1 LIFE':title,'',3000); roundTimeout(showWin,3000); }
 }
-function endGameOver(){ Game.state='gameover'; banner(Game.lives>0?'WRECKED':'GAME OVER',''); setTimeout(showLose,900); }
+function endGameOver(){ Game.state='gameover'; banner(Game.lives>0?'WRECKED':'GAME OVER','',3000); roundTimeout(showLose,3000); }
 
 /* ====================================================================
    CAMERA
@@ -2820,8 +3246,8 @@ function setHudMode(){
   $('placeBadge').style.display = race?'block':'none';
   $('wrongway').style.opacity = 0;
 }
-function banner(big,sub){ $('bannerBig').textContent=big; $('bannerSub').textContent=sub||'';
-  const b=$('banner'); b.style.opacity=1; clearTimeout(banner._t); banner._t=setTimeout(()=>b.style.opacity=0,1100); }
+function banner(big,sub,hold){ $('bannerBig').textContent=big; $('bannerSub').textContent=sub||'';
+  const b=$('banner'); b.style.opacity=1; clearTimeout(banner._t); banner._t=setTimeout(()=>b.style.opacity=0, hold||1100); }
 function pulseHits(){ const r=$('hitsRow'); r.classList.add('flash'); clearTimeout(pulseHits._t); pulseHits._t=setTimeout(()=>r.classList.remove('flash'),140); }
 function fatality(){ const f=$('fatality'); f.classList.remove('show'); void f.offsetWidth; f.classList.add('show'); banner('FATALITY!','+'+FATALITY_PTS); }
 function damageFlash(amt){ amt=clamp(amt,0,1); const f=$('flash'); f.style.boxShadow=`inset 0 0 160px 50px rgba(255,0,0,${amt*0.6})`;
@@ -2849,7 +3275,7 @@ function buildLoseVehChips(){ buildVehChips('loseVehBtns'); }
 function showWin(){
   const b=Game.lastBreakdown; let html=''; const payout=Math.round(b.earned*b.mult);
   if(b.race){
-    $('winTitle').textContent = b.standing ? 'LAST CAR RUNNING' : (b.place===1?'YOU WON THE RACE':'RACE OVER');
+    $('winTitle').textContent = b.standing ? 'LAST CAR RUNNING' : (b.place===1?'YOU WON THE RACE':'PODIUM FINISH');
     $('winTitle').className='title '+(b.won?'winColor':'goldColor');
     $('winSub').textContent = b.title;
     html+=boardRow('Hits landed', b.hits+' × '+HIT_PTS, true);
@@ -2909,10 +3335,10 @@ function updateHUD(){
   $('livesVal').textContent='♥'.repeat(Math.max(0,Game.lives))||'—';
   $('hits').textContent=Game.levelHits;
   if(Game.levelType!=='derby'){
-    const place=playerPlace();
+    const place=playerPlace(), field=Game.cars.filter(c=>!c.isTow).length;   // don't count the tow truck in the field
     $('modeVal').textContent = Math.min(p.laps+1,Course.laps)+'/'+Course.laps;
-    $('posVal').textContent = '#'+place+' / '+Game.cars.length;
-    $('placeOrd').textContent = ordinal(place)+' / '+Game.cars.length;
+    $('posVal').textContent = '#'+place+' / '+field;
+    $('placeOrd').textContent = ordinal(place)+' / '+field;
   }else{
     $('modeVal').textContent = aliveCars().length;
   }
@@ -2959,17 +3385,59 @@ function drawMinimap(){
     mm.beginPath(); mm.arc(OX+pu.x*sc,OY+pu.z*sc,2.6,0,7); mm.fill(); }
   // cars (player shows a heading tick)
   for(const c of Game.cars){ const mx=OX+c.x*sc, my=OY+c.z*sc;
-    mm.fillStyle=c.isPlayer?(c.alive?'#fff':'#777'):(c.alive?'#ff5a5a':'#555');
-    mmDot(mx,my,c.isPlayer?4.5:3.2, c.isPlayer&&c.alive?c.angle:undefined); }
+    mm.fillStyle=c.isPlayer?(c.alive?'#fff':'#777'):c.isTow?'#ffaa00':(c.alive?'#ff5a5a':'#555');
+    mmDot(mx,my,c.isPlayer?4.5:c.isTow?4.0:3.2, c.isPlayer&&c.alive?c.angle:undefined); }
 }
+
+/* ====================================================================
+   ADAPTIVE PERFORMANCE GOVERNOR
+   The static QUALITY tier only catches phones; an old/weak DESKTOP still
+   got the full 4096² shadows @ 2× pixel ratio. This measures real FPS and
+   steps quality down (and back up) at runtime, cheapest-looking lever
+   first: render resolution → shadow res → shadow refresh rate → particle
+   budget. Hysteresis + a settle window stop it oscillating.
+   ==================================================================== */
+const Perf={
+  level:0, MAXLVL:3, acc:0, frames:0, cool:0, bad:0, good:0, half:false, flip:false,
+  pixelMul:[1, 0.85, 0.72, 0.58],                      // fragment cost scales with the square of this
+  shadowRes:[QUALITY.shadowMap, 2048, 1024, 1024],
+  partMul:[1, 0.8, 0.6, 0.4],
+  set(level){
+    level=clamp(level,0,this.MAXLVL); if(level===this.level) return;
+    this.level=level;
+    renderer.setPixelRatio(Math.max(0.6, Math.min(window.devicePixelRatio,QUALITY.pixelCap)*this.pixelMul[level]));
+    const res=Math.min(this.shadowRes[level], QUALITY.shadowMap);
+    if(sunLight && sunLight.shadow.mapSize.x!==res){
+      sunLight.shadow.mapSize.set(res,res);
+      if(sunLight.shadow.map){ sunLight.shadow.map.dispose(); sunLight.shadow.map=null; }   // re-alloc at the new size next frame
+    }
+    this.half = level>=2;                              // L2+: refresh the shadow map every OTHER frame
+    if(particles) particles.budget=Math.floor(particles.MAX*this.partMul[level]);
+    this.cool=4;                                       // settle before judging the new level
+  },
+  frame(dt){
+    if(this.half){ this.flip=!this.flip; renderer.shadowMap.autoUpdate=this.flip; }
+    else if(!renderer.shadowMap.autoUpdate) renderer.shadowMap.autoUpdate=true;
+    if(Game.state!=='playing'||Game.paused){ this.acc=0; this.frames=0; return; }   // only judge live gameplay frames
+    if(this.cool>0){ this.cool-=dt; return; }
+    this.acc+=dt; this.frames++;
+    if(this.acc>=1.25){
+      const fps=this.frames/this.acc; this.acc=0; this.frames=0;
+      if(fps<45){ this.good=0; if(++this.bad>=2){ this.bad=0; this.set(this.level+1); } }          // 2 bad windows -> step down
+      else if(fps>57){ this.bad=0; if(++this.good>=4 && this.level>0){ this.good=0; this.set(this.level-1); } }  // sustained headroom -> step back up
+      else { this.bad=0; this.good=0; }
+    }
+  }
+};
 
 /* ====================================================================
    MAIN LOOP
    ==================================================================== */
 let acc=0; const clock=new THREE.Clock();
+const _ctrlArr=[], _IDLE_CTRL={throttle:0,steer:0,hand:false};   // reused each frame — no per-frame control-array/object churn
 // soft-update cadences: these refresh things the eye/ear can't distinguish from per-frame, so we run them on coarse timers
-let audioAcc=1, hudAcc=1, mapAcc=1;            // start >= interval so each fires on the very first frame
-const AUDIO_DT=1/30, HUD_DT=0.1, MAP_DT=0.5;   // engine/wind ~30Hz, HUD ~10Hz, minimap 2Hz
+let audioAcc=1, hudAcc=1, mapAcc=1, hlAcc=1, nightAcc=1;   // start >= interval so each fires on the very first frame
+const AUDIO_DT=1/30, HUD_DT=0.1, MAP_DT=0.5, HL_DT=1/30, NIGHT_DT=0.08;   // engine/wind ~30Hz, HUD ~10Hz, minimap 2Hz, headlights 30Hz, stars 12Hz
 function loop(){
   requestAnimationFrame(loop);
   let dt=clock.getDelta(); if(dt>0.05) dt=0.05; Game.elapsed+=dt;
@@ -2988,13 +3456,26 @@ function loop(){
         const dec=dt/0.25;
         input.steer = input.steer>0 ? Math.max(0,input.steer-dec) : Math.min(0,input.steer+dec);
       } }
-    const controls=Game.cars.map(c=>{
-      if(Game.state!=='playing') return {throttle:0,steer:0,hand:false};
-      if(c.isPlayer) return {throttle:input.throttle,steer:input.steer,hand:input.hand};
-      if(!c.alive) return {throttle:0,steer:0,hand:false};
-      return Game.levelType==='derby'?driveDerbyAI(c,dt):driveRaceAI(c,dt);
-    });
+    _ctrlArr.length=Game.cars.length;
+    for(let i=0;i<Game.cars.length;i++){ const c=Game.cars[i];
+      _ctrlArr[i] = (Game.state!=='playing') ? _IDLE_CTRL                       // shared idle object (read-only in physics)
+        : c.isTow                            ? driveTowAI(c,dt)                 // tow truck has its own state machine
+        : c.isPlayer                         ? {throttle:input.throttle,steer:input.steer,hand:input.hand}
+        : !c.alive                           ? _IDLE_CTRL
+        : (Game.levelType==='derby' ? driveDerbyAI(c,dt) : driveRaceAI(c,dt));
+    }
+    const controls=_ctrlArr;
+    // one course projection per car per FRAME (reused by the grass bog + sidewalk curb across all physics
+    // substeps). project() scans the whole city polyline, so this replaces up to 6×2 scans/car with one.
+    if(Game.levelType==='city') for(const c of Game.cars) c._proj=Course.project(c.x,c.z);
     acc+=dt; let sub=0; while(acc>=FIXED_DT&&sub<MAX_SUB){ physicsStep(FIXED_DT,controls); acc-=FIXED_DT; sub++; } if(sub===MAX_SUB) acc=0;
+
+    // flash the tow truck's warning lights amber whenever it's working (pickup/towing) — per-frame is fine.
+    // (The towed car's position is now glued to the truck inside physicsStep, every substep — see syncTowed.)
+    if(Game.towTruck){ const tw=Game.towTruck,ts=tw.towState;
+      const wlm=tw.mesh&&tw.mesh.userData.warnLightMat;
+      if(wlm){ const active=ts&&ts.mode!=='idle';
+        wlm.emissiveIntensity=active?(Math.sin(Game.elapsed*12)>0?1.5:0.05):0.35; } }
 
     for(const c of Game.cars){ if(!c.alive||c.y>0.3) continue;
       c.dustTimer-=dt;
@@ -3013,8 +3494,9 @@ function loop(){
       } }
 
     for(const c of Game.cars) c.syncMesh(dt);
-    particles.update(dt); updateCamera(dt); updateHeadlight(); updateSunShadow();
-    if(Game.night) twinkleNightSky(Game.elapsed);
+    particles.update(dt); updateCamera(dt); updateSunShadow();
+    hlAcc+=dt; if(hlAcc>=HL_DT){ hlAcc=0; updateHeadlight(); }
+    if(Game.night){ nightAcc+=dt; if(nightAcc>=NIGHT_DT){ nightAcc=0; twinkleNightSky(Game.elapsed); } }
     if(Game.levelType!=='derby' && Game.state==='playing') updateRaceProgress();
     if(Game.state==='playing') updateDrift(dt);
     // HUD text + minimap are glanceable -> refresh on coarse timers instead of every frame (cuts DOM + canvas work)
@@ -3027,6 +3509,7 @@ function loop(){
       const [rx,rz]=p.right(); const slip=Math.abs(p.vx*rx+p.vz*rz);
       audio.screech((p.alive&&p.y<0.3)?clamp((slip-3.5)/7,0,1)*clamp(p.speed/14,0,1):0); } }   // tyres howl when sliding hard at speed
   }
+  Perf.frame(dt);                 // adaptive quality: judge fps + set this frame's shadow refresh BEFORE rendering
   renderer.render(scene,camera);
   // once the freshly-built level has been drawn a couple of frames, take down the "GENERATING LEVEL" screen
   if(Game.reveal>0 && --Game.reveal===0){ showOverlay(null); hud(true); }
@@ -3051,6 +3534,7 @@ function togglePause(){ Game.paused=!Game.paused; showOverlay(Game.paused?'pause
 
 // hide the overlay immediately for instant feedback, then build the (slow) level on the next frame
 function go(r){
+  if(Game.state==='loading') return;   // debounce: ignore a second click while a level is already being built
   // IMMEDIATELY cover the scene with the "GENERATING LEVEL" screen and cut the motor, THEN build on a later
   // frame. The level build is synchronous and can take a moment; deferring it past a paint means the loading
   // screen actually shows instead of the old scene appearing frozen with the car idling.
