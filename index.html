@@ -26,6 +26,9 @@
 -->
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <title>Bent Metal Derby — Demolition Derby &amp; Race</title>
 <style>
   :root{ --accent:#ff7b29; --good:#43d17a; --bad:#ff3b3b; --gold:#ffd23f; }
@@ -37,6 +40,14 @@
 
   /* ---------- HUD ---------- */
   #hud{ position:absolute; inset:0; pointer-events:none; }
+  #touchControls{ display:none; position:absolute; inset:0; pointer-events:none; }
+  .touchGroup{ position:absolute; bottom:18px; display:flex; gap:10px; }
+  .touchGroup.pedals{ left:18px; } .touchGroup.steering{ right:18px; }
+  .touchBtn{ pointer-events:auto; touch-action:none; user-select:none; -webkit-user-select:none;
+    min-width:58px; min-height:58px; padding:0 10px; border:1px solid #a6b5ca; border-radius:14px;
+    background:rgba(10,14,20,.8); color:#fff; font:bold 14px system-ui; }
+  .touchBtn.pressed{ background:#b64a08; border-color:#ffb869; }
+  #touchPause{ position:absolute; top:18px; right:18px; min-height:44px; }
   .panel{ position:absolute; background:rgba(10,14,20,.55); backdrop-filter:blur(4px);
     border:1px solid rgba(255,255,255,.12); border-radius:12px; padding:10px 14px; }
   #healthWrap{ top:18px; left:18px; width:280px; }
@@ -102,7 +113,7 @@
   /* ---------- overlays ---------- */
   .overlay{ position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:safe center;
     background:radial-gradient(120% 120% at 50% 20%, rgba(20,24,34,.86), rgba(5,7,11,.96));
-    pointer-events:auto; text-align:center; padding:30px; overflow-y:auto; }
+    pointer-events:auto; text-align:center; padding:30px; overflow:hidden; }
   .hidden{ display:none !important; }
   .title{ font-size:58px; font-weight:900; letter-spacing:3px; line-height:1;
     background:linear-gradient(180deg,#fff,#ff9a4d); -webkit-background-clip:text; background-clip:text; color:transparent;
@@ -148,6 +159,8 @@
     transition:border-color .12s, background .12s, color .12s; }
   .chip:hover{ border-color:rgba(255,123,41,.55); }
   .chip.selected{ border-color:var(--accent); background:rgba(255,123,41,.18); color:#fff; }
+  .paintChip{ width:34px;height:34px;padding:0;border-radius:50%;box-shadow:inset 0 0 0 2px rgba(0,0,0,.28); }
+  .paintChip.selected{ transform:scale(1.15);box-shadow:0 0 0 2px #fff,inset 0 0 0 2px rgba(0,0,0,.28); }
   .blurb{ font-size:12.5px; color:#9fb0c4; min-height:16px; }
   .vehStats{ margin:10px auto 0; display:flex; flex-direction:column; gap:5px; width:100%; max-width:340px; }
   .statRow{ display:flex; align-items:center; gap:10px; }
@@ -185,7 +198,7 @@
   .goldColor{ color:var(--gold)!important; -webkit-text-fill-color:initial; background:none; }
 
   /* scoreboard breakdown */
-  .board{ margin-top:22px; width:420px; max-width:90vw; font-size:16px; }
+  .board{ margin-top:22px; width:420px; max-width:90vw; font-size:16px; min-height:0; overflow-y:auto; }
   .board .line{ display:flex; justify-content:space-between; padding:7px 4px; border-bottom:1px solid rgba(255,255,255,.08); }
   .board .line span:last-child{ font-variant-numeric:tabular-nums; font-weight:700; }
   .board .total{ border-bottom:none; margin-top:6px; font-size:22px; }
@@ -193,14 +206,71 @@
   .dim{ color:#8fa0b4; }
   .credit{ position:absolute; bottom:16px; font-size:11px; letter-spacing:2px; color:#5a6b82; opacity:.5; }
 
+  /* Orientation fallback: browsers that refuse the landscape lock get a game-like rotation gate. */
+  #rotateGate{ display:none; position:fixed; inset:0; z-index:10000; background:#05070b;
+    align-items:center; justify-content:center; flex-direction:column; gap:14px; text-align:center; padding:24px; }
+  #rotateGate .phone{ width:45px;height:78px;border:4px solid #ff8a3d;border-radius:9px;animation:turnPhone 1.8s ease-in-out infinite; }
+  #rotateGate b{font-size:22px;letter-spacing:2px} #rotateGate span{font-size:13px;color:#9fb0c4;max-width:320px}
+  @keyframes turnPhone{ 0%,25%{transform:rotate(0)} 65%,100%{transform:rotate(90deg)} }
+  @media (orientation:portrait) and (max-width:900px){ #rotateGate{display:flex;} }
+
+  /* Laptop / windowed landscape: reorganise the menu before it would ever need a scrollbar. */
+  @media (orientation:landscape) and (max-height:900px){
+    .overlay{padding:14px 22px}.title{font-size:clamp(38px,7vh,54px)}.subtitle{margin-top:4px}
+    #startScreen .card{display:none}
+    .setup{margin-top:12px;width:min(940px,94vw);display:grid;grid-template-columns:1.2fr .8fr .8fr;gap:10px 18px;align-items:start}
+    .setupRow:first-child{grid-row:span 2}.setupRow{gap:6px}.volRow{grid-column:2/4;flex-direction:row}.garageRow{grid-column:1/4;margin-top:0}
+    #vehPreview{max-height:100px}.vehStats{margin-top:3px}.btn{margin-top:12px;padding:11px 34px}
+    .garage{margin-top:10px;width:min(900px,94vw);display:grid;grid-template-columns:1fr 1fr;gap:7px 10px}.upg{padding:9px 12px}
+    .board{margin-top:10px;max-height:62vh;display:block;width:min(620px,90vw);font-size:13px}.board .line{padding:4px 3px}
+  }
+
+  /* Short landscape screens (phones, small tablets and compact windows): every overlay is one-screen UI. */
+  @media (orientation:landscape) and (max-height:620px){
+    .overlay{overflow:hidden;justify-content:center;padding:8px 14px;}
+    .title{font-size:clamp(27px,8vh,46px);line-height:.95}.subtitle{margin-top:3px;font-size:10px;letter-spacing:3px}
+    .card{margin-top:8px;padding:8px 14px;line-height:1.35;font-size:11px;max-width:760px}.card h3{font-size:9px;margin-bottom:3px}
+    #startScreen .card{display:none}
+    .setup{margin-top:7px;width:min(900px,96vw);display:grid;grid-template-columns:1.25fr .8fr .8fr;gap:6px 12px;align-items:start}
+    .setupRow{gap:4px}.setupRow:first-child{grid-row:span 2}.setupLabel{font-size:9px;letter-spacing:2px}
+    #vehPreview{display:none}.vehStats{display:grid;grid-template-columns:1fr 1fr;gap:3px 8px;margin-top:2px}.statRow{gap:5px}.statName{font-size:8px;width:42px}
+    .blurb{font-size:9px;min-height:10px}.chips{gap:5px}.chip{padding:5px 10px;font-size:11px;border-radius:8px}.paintChip{width:24px;height:24px;padding:0}
+    .volRow{grid-column:2/4;flex-direction:row}.vol{width:min(220px,28vw)}.garageRow{grid-column:1/4;margin:0}.cashTag{font-size:10px}.miniBtn{padding:4px 10px;font-size:10px}
+    .btn{margin-top:7px;padding:8px 25px;font-size:13px}.btn.ghost{padding:7px 18px;font-size:12px}.winBtns{gap:8px}
+    .board{margin-top:7px;font-size:11px;width:min(620px,88vw);display:grid;grid-template-columns:1fr 1fr;column-gap:20px}.board .line{padding:3px 2px}.board .total{font-size:14px;margin-top:2px}
+    #winScreen>div[style],#loseScreen>div[style]{margin:5px 0 2px!important}#winVehBtns,#loseVehBtns{gap:4px}
+    .cashBig{margin-top:4px;font-size:12px}.cashBig b{font-size:17px}.garage{margin-top:6px;width:min(880px,95vw);display:grid;grid-template-columns:1fr 1fr;gap:5px 8px}
+    .upg{padding:6px 9px;gap:7px}.upg .nm{font-size:11px}.upg .ds{font-size:9px}.pips{margin-top:2px}.pip{width:14px;height:4px}.buyBtn{padding:6px 9px;font-size:10px;min-width:68px}
+    .spinner{margin-top:12px;width:32px;height:32px}.credit{display:none}
+  }
+
   /* chunky arcade-cabinet font for the big HUD readouts + titles */
   #speedVal, #score, #placeOrd, #roundLabel, #banner .big, .title, #fatality, #livesVal {
     font-family:"Arial Black","Arial Narrow Bold",Impact,system-ui,sans-serif; }
   #speedVal, #banner .big, .title { letter-spacing:1px; }
+  @media (pointer:coarse){
+    #touchControls{ display:block; } #controlsHint{ display:none; }
+    #healthWrap{ width:180px; } #stats{ min-width:145px; }
+    #stats .row{ font-size:12px; } #stats #roundLabel{ font-size:14px; }
+    #touchPause{ left:50%; right:auto; transform:translateX(-50%); }
+    #minimap{ bottom:90px; right:18px; width:100px; height:100px; }
+    #placeBadge{ top:88px; bottom:auto; left:18px; transform:none; padding:5px 10px; }
+    #placeOrd{ font-size:20px; }
+  }
+  @media (pointer:coarse) and (max-height:360px){
+    #stats .row{ font-size:11px; margin:1px 0; }
+    #minimap{ width:80px; height:80px; }
+  }
 </style>
 </head>
 <body>
 <div id="app"></div>
+<div id="rotateGate">
+  <div class="phone"></div>
+  <b>ROTATE TO LANDSCAPE</b>
+  <span>Bent Metal Derby is built like a console racer. Turn your device sideways to continue.</span>
+  <button class="miniBtn" id="landscapeRetryBtn">TRY FULLSCREEN</button>
+</div>
 
 <!-- HUD -->
 <div id="hud" class="hidden">
@@ -233,6 +303,18 @@
   <div id="wrongway">◄ WRONG WAY ►</div>
   <div id="fatality">FATALITY</div>
   <div id="flash"></div>
+  <div id="touchControls" aria-label="Driving controls">
+    <div class="touchGroup steering">
+      <button class="touchBtn" data-touch="hand">SLIDE</button>
+      <button class="touchBtn" data-touch="left" aria-label="Steer left">◀</button>
+      <button class="touchBtn" data-touch="right" aria-label="Steer right">▶</button>
+    </div>
+    <div class="touchGroup pedals">
+      <button class="touchBtn" data-touch="gas">FORWARD</button>
+      <button class="touchBtn" data-touch="brake" aria-label="Brake and reverse">REVERSE</button>
+    </div>
+    <button class="touchBtn" id="touchPause" aria-label="Pause game">Ⅱ</button>
+  </div>
 </div>
 
 <!-- START -->
@@ -274,6 +356,10 @@
     <div class="setupRow">
       <div class="setupLabel">DIFFICULTY</div>
       <div id="diffBtns" class="chips"></div>
+    </div>
+    <div class="setupRow">
+      <div class="setupLabel">PAINT</div>
+      <div id="paintBtns" class="chips"></div>
     </div>
     <div class="setupRow volRow">
       <div class="setupLabel">VOLUME</div>
@@ -381,9 +467,11 @@ const GRIND_DPS=5.0;       // max damage/sec from sustained grinding contact
 const GRIND_GRACE=0.10;    // seconds of sustained contact before grind damage starts
 const REVERSE_MAX=11;                            // reverse stays below the 1st->2nd shift point (12) so it never up-shifts
 const FINISH_BONUS={1:6000, 2:3000, 3:1500};     // a podium finish pays like surviving, so racing pays off
+const CHAMP_POINTS=[10,8,6,5,4,3,2,1];
 const FATALITY_PTS=2000;                         // bonus when a car you wrecked explodes
 const TOP_SPEED=36;                              // approx forward top speed (for pitch fade)
 const PALETTE = [0xff7b29,0x2e8bff,0x39d35c,0xffd23f,0xb04bff,0xff4d6d,0x18c7c7,0xe8e8e8];
+const PLAYER_PAINTS=[0xff7b29,0xe83b35,0x2e8bff,0x39d35c,0xffd23f,0xb04bff,0x18c7c7,0xe8e8e8,0x24262b];
 const NAMES = ['VIPER','CRUSHER','MAULER','HAVOC','RAZOR','DIESEL','BANDIT'];
 
 /* ----------------------- track helpers (race) -----------------------
@@ -514,11 +602,32 @@ function genDirtTrack(){
   Course.setPoly(pts, halfW, 0);     // no sidewalk on a rally track
   Course.hairpin={ x:Lx+Rs*0.4, z:0, r:Rs+22 };                    // mark the hairpin so the drift zone / camera can use it
 }
+// Purpose-built flat figure-eight. The start is on the outside of the right lobe; the two diagonals cross at
+// u=.25/.75. Progress and AI use branch-aware projection near that crossover (see projectCourseForCar).
+function genFigureEight(){
+  const pts=[], N=128, A=72, B=44;
+  for(let i=0;i<N;i++){ const t=i/N*TAU; pts.push([A*Math.cos(t),B*Math.sin(t*2)]); }
+  Course.setPoly(pts,12,0); Course.figureCross=[0.25,0.75];
+}
+
+function projectCourseForCar(c){
+  if(Game.levelType!=='figure8' || c.prevU==null) return Course.project(c.x,c.z);
+  const n=Course.pts.length, hint=((c.prevU%1)+1)%1; let best=1e18,bi=0,bf=0,bcx=0,bcz=0;
+  for(let i=0;i<n;i++){
+    const mid=(Course.cum[i]+Course.seglen[i]*0.5)/Course.total;
+    let du=Math.abs(mid-hint); du=Math.min(du,1-du); if(du>0.16)continue;
+    const a=Course.pts[i],b=Course.pts[(i+1)%n],abx=b[0]-a[0],abz=b[1]-a[1],l2=abx*abx+abz*abz||1;
+    const f=clamp(((c.x-a[0])*abx+(c.z-a[1])*abz)/l2,0,1),px=a[0]+abx*f,pz=a[1]+abz*f,d=(c.x-px)**2+(c.z-pz)**2;
+    if(d<best){best=d;bi=i;bf=f;bcx=px;bcz=pz;}
+  }
+  const segl=Course.seglen[bi]||1,a=Course.pts[bi],b=Course.pts[(bi+1)%n],tx=(b[0]-a[0])/segl,tz=(b[1]-a[1])/segl,nx=tz,nz=-tx;
+  return {u:(Course.cum[bi]+segl*bf)/Course.total,lateral:(c.x-bcx)*nx+(c.z-bcz)*nz,cx:bcx,cz:bcz,tx,tz,nx,nz};
+}
 
 /* ====================================================================
    THREE setup
    ==================================================================== */
-let renderer, scene, camera, levelGroup;
+let renderer, scene, camera, levelGroup, rainField;
 let sunLight, hemiLight, ambLight, skyMat, skyMesh, nightSky, twinkleStars, playerHeadlight, headlightTarget;
 let envDay, envNight, skidMarks, sunGroup, groundMesh, grassTex, groundDirtTex;
 const SKY = 0x9fc3e8, NIGHT_SKY = 0x04050b;
@@ -568,6 +677,12 @@ function initThree(){
   groundMesh.rotation.x=-Math.PI/2; groundMesh.position.y=-0.5; groundMesh.receiveShadow=true; scene.add(groundMesh);  // clearly below the road so it never bleeds over it
 
   levelGroup = new THREE.Group(); scene.add(levelGroup);
+  // Reusable rain field. It follows the camera and wraps vertically, so weather costs no allocations per frame.
+  { const n=QUALITY.low?300:650, pos=new Float32Array(n*3);
+    for(let i=0;i<n;i++){ pos[i*3]=rand(-42,42); pos[i*3+1]=rand(-5,35); pos[i*3+2]=rand(-42,42); }
+    const g=new THREE.BufferGeometry(); g.setAttribute('position',new THREE.BufferAttribute(pos,3));
+    rainField=new THREE.Points(g,new THREE.PointsMaterial({color:0xb8d8ff,size:0.12,transparent:true,opacity:0.62,depthWrite:false}));
+    rainField.visible=false; rainField.frustumCulled=false; scene.add(rainField); }
   skidMarks = new SkidMarks(QUALITY.skidMarks);
   window.addEventListener('resize', onResize);
 }
@@ -617,8 +732,10 @@ function applyEnvironment(){
   const fInt = night ? (Game.levelType==='city'?2.5:5.0) : 0.0;
   for(const f of Game.floods) f.intensity = fInt;                 // localised bright pools (fast falloff)
   if(renderer) renderer.toneMappingExposure = night?0.5:0.95;     // night frame clearly darker than day; day a touch punchier
-  // wet-look road at night: a smoother surface so the streetlights & headlights streak across it
-  if(Game.roadMat && !Game.dirtTrack){ Game.roadMat.roughness = night?0.45:0.95; Game.roadMat.metalness = night?0.25:0.0; Game.roadMat.needsUpdate=true; }
+  // Rain is physically slippery and visibly reflective; night makes the reflections stronger still.
+  if(Game.roadMat && !Game.dirtTrack){ Game.roadMat.roughness = Game.rain?(night?0.24:0.36):(night?0.45:0.95);
+    Game.roadMat.metalness = Game.rain?0.32:(night?0.25:0.0); Game.roadMat.needsUpdate=true; }
+  if(rainField) rainField.visible=!!Game.rain;
   const ch=document.getElementById('controlsHint'); if(ch) ch.classList.toggle('night', night);   // legend: dark in day, light at night
 }
 function buildSky(){
@@ -922,7 +1039,7 @@ function buildTree(x,z,variant,s){
   else if(variant===4){ trunk(0.42,0.6,3.4,7); ico(2.6,4.3,0,0,0.72); ico(1.7,3.9,1.4,0.6); rb=0.6; }                // wide oak
   else { trunk(0.32,0.46,3.0,6); ico(2.05,4.0); rb=0.46; }                                                           // classic broadleaf
   g.position.set(x,0,z); g.rotation.y=rand(0,TAU); g.scale.set(s,s,s); levelGroup.add(g);
-  Game.trees.push({x, z, r:(rb+0.18)*s});
+  Game.trees.push({x, z, r:(rb+0.18)*s, height:[3,4.2,3,2.2,3.4][variant]*s});
 }
 // scatter trees over candidate spots, sparingly: spaced out from each other and skipping anything `clear` rejects
 function scatterTrees(cands, target, clear){
@@ -1080,6 +1197,7 @@ function makeArrowMesh(){
 }
 
 function buildRaceTrack(){
+  Game.trackWalls=true;   // only this circuit builds continuous walls along both road edges
   // tow bay set up FIRST so the road ribbon, the outer wall AND the drivable clamp all bulge out around it (a layby)
   { const bayU=0.75, pu=Course.at(bayU);
     buildPullout(pu.cx+pu.nx*(TRK.halfW+4.5), pu.cz+pu.nz*(TRK.halfW+4.5), Math.atan2(pu.tx,pu.tz),
@@ -1225,7 +1343,7 @@ function buildCityTrack(){
   const ringRoadL=offsetRing(-HW), ringRoadR=offsetRing(HW, pulloutBulge);
   const ringSwL=offsetRing(-(HW+SW)), ringSwR=offsetRing(HW+SW, pulloutBulge);
   // ---- road ----
-  Game.roadMat=new THREE.MeshStandardMaterial({map:makeAsphaltTexture(),roughness:.95,side:THREE.DoubleSide, normalMap:makeSurfaceNormal(2,Math.max(8,total/16)), normalScale:new THREE.Vector2(0.5,0.5)});
+  Game.roadMat=new THREE.MeshStandardMaterial({map:makeAsphaltTexture(),roughness:.95,side:THREE.DoubleSide, normalMap:makeSurfaceNormal(2,Math.max(8,Math.round(total/16))), normalScale:new THREE.Vector2(0.5,0.5)});
   levelGroup.add(ringStrip(ringRoadL, ringRoadR, 0, Game.roadMat));
   // ---- raised sidewalks (1-car-wide curb you can hop onto) on both sides ----
   // polygonOffset pushes the sidewalk surface slightly deeper in the depth buffer so car tires
@@ -1262,7 +1380,7 @@ function buildCityTrack(){
       const b=new THREE.Mesh(new THREE.BoxGeometry(depth, h, bw), mat);
       b.position.set(bx, h/2, bz); b.rotation.y=Math.atan2(a.tx,a.tz); b.castShadow=true; b.receiveShadow=true; levelGroup.add(b);
       // record an oriented footprint so the building acts as a solid barrier (width along tangent, depth along normal)
-      Game.cityBuildings.push({x:bx, z:bz, tx:a.tx, tz:a.tz, nx, nz, hw:bw/2, hd:depth/2});
+      Game.cityBuildings.push({x:bx, z:bz, tx:a.tx, tz:a.tz, nx, nz, hw:bw/2, hd:depth/2, height:h});
       s += bw + rand(1.5,5);
     }
   }
@@ -1291,7 +1409,7 @@ function buildCityTrack(){
       buildFloodPole(px,pz);
       // lamp posts are SOLID street furniture: record a small footprint so the same push-out that stops cars
       // at the buildings stops them dead at a pole too (no more driving through them)
-      Game.cityBuildings.push({x:px, z:pz, tx:1,tz:0, nx:0,nz:1, hw:0.7, hd:0.7}); } }
+      Game.cityBuildings.push({x:px, z:pz, tx:1,tz:0, nx:0,nz:1, hw:0.7, hd:0.7, height:16}); } }
   // ---- jumps on the two longest straights ----
   let segs=Course.seglen.map((l,i)=>({l,i})).sort((a,b)=>b.l-a.l).slice(0,2);
   for(const sg of segs){ const a=Course.pts[sg.i], b=Course.pts[(sg.i+1)%Course.pts.length];
@@ -1312,18 +1430,19 @@ function buildCityTrack(){
 
 // dirt RALLY track: loose road ribbon + tyre walls + jumps + barrels (no sidewalks/buildings). The hairpin
 // is the prime drift spot; drift scoring is armed across the whole loose surface.
-function buildDirtTrack(){
+function buildDirtTrack(asphalt=false){
   const HW=Course.halfW, total=Course.total;
-  // tow bay: widen the loose road into a layby (dirt has no solid walls — the drivable-clamp bulge + a clear
-  // apron are enough). Set up before the road + tyre bumpers so the road widens and the bumpers keep clear.
+  // tow bay: widen the loose road into a layby with a clear apron. The surrounding terrain stays drivable.
+  // Set up before the road + tyre bumpers so the road widens and the bumpers keep clear.
   { const bayU=0.65, a=Course.at(bayU);
     buildPullout(a.cx+a.nx*(HW+4), a.cz+a.nz*(HW+4), Math.atan2(a.tx,a.tz),
       { u:bayU, halfU:12/total, depth:8, apronLen:24, yardLen:13 }); }
-  Game.roadMat=new THREE.MeshStandardMaterial({map:makeDirtTexture(),roughness:1,side:THREE.DoubleSide, normalMap:makeSurfaceNormal(4,4), normalScale:new THREE.Vector2(0.8,0.8)});
+  Game.roadMat=new THREE.MeshStandardMaterial({map:asphalt?makeAsphaltTexture():makeDirtTexture(),roughness:asphalt?.95:1,side:THREE.DoubleSide,
+    normalMap:makeSurfaceNormal(asphalt?2:4,asphalt?24:4),normalScale:new THREE.Vector2(asphalt?0.5:0.8,asphalt?0.5:0.8)});
   levelGroup.add(ringStrip(offsetRing(-HW), offsetRing(HW, pulloutBulge), 0, Game.roadMat));
   // tyre walls down both edges (spaced), recorded for the bounce physics
   const tg=tireGeo(); Game.tires=[];
-  for(const sgn of [1,-1]){ let acc=0, prev=Course.at(0);
+  if(Game.levelType!=='figure8') for(const sgn of [1,-1]){ let acc=0, prev=Course.at(0);
     for(let i=1;i<=1600;i++){ const a=Course.at(i/1600); acc+=Math.hypot(a.cx-prev.cx,a.cz-prev.cz); prev=a;
       if(acc>=14){ acc=0;
         if(sgn===1 && pulloutBulge(i/1600)>0.01) continue;   // keep the tow bay clear of bumpers
@@ -1338,13 +1457,34 @@ function buildDirtTrack(){
   // direction chevrons
   for(let k=0;k<16;k++){ const a=Course.at(k/16+0.01); const ar=makeArrowMesh(); ar.position.set(a.cx,0.02,a.cz); ar.rotation.y=Math.atan2(a.tx,a.tz); levelGroup.add(ar); }
   // jumps on the two longest straights
-  { let segs=Course.seglen.map((l,i)=>({l,i})).sort((p,q)=>q.l-p.l).slice(0,2);
+  if(Game.levelType!=='figure8'){ let segs=Course.seglen.map((l,i)=>({l,i})).sort((p,q)=>q.l-p.l).slice(0,2);
     for(const sg of segs){ const a=Course.pts[sg.i], b=Course.pts[(sg.i+1)%Course.pts.length];
       addRamp((a[0]+b[0])/2,(a[1]+b[1])/2, Math.atan2(b[0]-a[0],b[1]-a[1])); } }
   // a handful of burning barrels near the edges
-  for(let k=0;k<5;k++){ const a=Course.at(rand(0,1)); const off=rand(-HW+4,HW-4); const bx=a.cx+a.nx*off, bz=a.cz+a.nz*off; if(!tooCloseToRamp(bx,bz)) spawnBarrel(bx,bz); }
+  if(Game.levelType!=='figure8') for(let k=0;k<5;k++){ const a=Course.at(rand(0,1)); const off=rand(-HW+4,HW-4); const bx=a.cx+a.nx*off, bz=a.cz+a.nz*off; if(!tooCloseToRamp(bx,bz)) spawnBarrel(bx,bz); }
   // flood poles spaced around the loop
-  { const spacing=72, count=Math.max(4,Math.round(total/spacing)); for(let i=0;i<count;i++){ const a=Course.at(i/count); buildFloodPole(a.cx+a.nx*(HW+6), a.cz+a.nz*(HW+6)); } }
+  { const spacing=72, count=Math.max(4,Math.round(total/spacing)); for(let i=0;i<count;i++){ const a=Course.at(i/count);
+      const px=a.cx+a.nx*(HW+6), pz=a.cz+a.nz*(HW+6); buildFloodPole(px,pz);
+      Game.trees.push({x:px,z:pz,r:0.55,height:16,pole:true}); // solid poles on every open course
+    } }
+  // Figure-eight grandstands sit beyond the grass runoff at both lobes. They frame the action without becoming
+  // obstacles on an intentionally open course, and all face inward toward the crossover.
+  if(Game.levelType==='figure8'){
+    const stands=[[-104,-24],[-104,24],[104,-24],[104,24],[-34,76],[34,-76]];
+    for(const [x,z] of stands){
+      const angle=Math.atan2(x,z); buildBleacher(x,z,angle);
+      // Match buildBleacher's 20×9 footprint: local X is its width axis and local Z its depth axis.
+      Game.cityBuildings.push({x,z,tx:Math.cos(angle),tz:-Math.sin(angle),nx:Math.sin(angle),nz:Math.cos(angle),hw:10,hd:4.5,height:7,stand:true});
+    }
+    const cands=[];
+    for(let i=0;i<80;i++){ const a=Course.at(i/80); for(const side of [-1,1]){
+      const off=HW+rand(5,15); cands.push({x:a.cx+a.nx*side*off,z:a.cz+a.nz*side*off}); } }
+    scatterTrees(cands,12,(x,z)=>{
+      const pr=Course.project(x,z); if(Math.abs(pr.lateral)<HW+3+(pr.lateral>0?pulloutBulge(pr.u):0))return false;
+      for(const [sx,sz] of stands) if((x-sx)**2+(z-sz)**2<18*18)return false;
+      return true;
+    });
+  }
   // (the tow bay + its layby were set up at the top so the loose road widens and the bumpers keep clear)
 }
 
@@ -1369,7 +1509,10 @@ class Barrel{
   step(dt){
     this.hitCd-=dt;
     this.vx*=Math.exp(-2.2*dt); this.vz*=Math.exp(-2.2*dt);
-    if(this.y>0||this.vy!==0){ this.vy-=GRAVITY*dt; this.y+=this.vy*dt; if(this.y<0){this.y=0;this.vy=0;} }
+    if(Game.levelType!=='derby'&&!Game.trackWalls) courseGround(this); else this.groundY=0;
+    const gy=this.groundY;
+    if(this.y<gy && this.vy<=0) this.y=gy;
+    if(this.y>gy||this.vy!==0){ this.vy-=GRAVITY*dt; this.y+=this.vy*dt; if(this.y<gy){this.y=gy;this.vy=0;} }
     this.x+=this.vx*dt; this.z+=this.vz*dt;
     if(Game.levelType!=='derby') trackClampBody(this,this.r); else arenaClampPoint(this,this.r);
     this.mesh.position.set(this.x,this.y,this.z);
@@ -1804,7 +1947,8 @@ class Car{
     this.groundY=0;
     if(this.blob) this.blob.visible=true;
     const u0=(Game.levelType==='derby')?0:Course.project(x,z).u;
-    this.cumU=0; this.prevU=u0; this.prevUWarn=u0; this.laps=0; this.finished=false;
+    this.cumU=Game.levelType==='derby'?0:(u0>0.5?u0-1:u0); // measure laps from the finish line, not each grid slot
+    this.prevU=u0; this.prevUWarn=u0; this.laps=0; this.finished=false; this.finishOrder=0; this.removed=false;
     this.mesh.visible=true; this.applyDamageVisual(); this.syncMesh(0);
   }
   get speed(){ return Math.hypot(this.vx,this.vz); }
@@ -1814,6 +1958,7 @@ class Car{
     for(const sl of [1,-1]) for(const sw of [1,-1]) v.push([this.x+fx*L*sl+rx*W*sw, this.z+fz*L*sl+rz*W*sw]); return v; }
 
   step(dt,ctrl){
+    if(this.removed) return;
     if(!this.alive){ this.vx*=Math.exp(-0.9*dt); this.vz*=Math.exp(-0.9*dt); this.omega*=Math.exp(-1.8*dt);
       if(this.burning && !this.exploded){ this.explodeTimer-=dt; if(this.explodeTimer<=0) this.explode(); }
       this.integrate(dt); return; }
@@ -1836,10 +1981,10 @@ class Car{
     }
     const nitro = this.nitroT>0 ? 1.7 : 1;
     const air = this.y>0.4 && !this.onRamp;     // climbing a ramp keeps engine power
-    // off-road grass (city only): bogs the car down hard at any speed, and the higher the speed the more
+    // off-road grass (city + open figure-eight): bogs the car down without acting like an invisible wall.
     // it tugs the steering around — so cutting the corner across the grass is never worth it
     let grass=0;
-    if(Game.levelType==='city' && !air){ const pr=this._proj||Course.project(this.x,this.z); const lat=Math.abs(pr.lateral);   // _proj: one projection/frame
+    if((Game.levelType==='city'||Game.levelType==='figure8') && !Game.dirtTrack && !air){ const pr=this._proj||Course.project(this.x,this.z); const lat=Math.abs(pr.lateral);   // _proj: one projection/frame
       const paved=Course.halfW+Course.sidewalk+(pr.lateral>0?pulloutBulge(pr.u):0);   // the widened bay is paved, not grass
       grass=clamp((lat-paved)/2.5, 0, 1); }
     const grassDrive=1-0.36*grass;             // grass saps acceleration (softened ~half)
@@ -1926,7 +2071,7 @@ class Car{
   }
 
   damage(amount,attacker){
-    if(!this.alive) return;
+    if(!this.alive || this.removed || amount<=0) return;
     if(this.shieldT>0){ this.hitFlash=0.4; if(this.shieldRing) this.shieldRing.userData.flash=1; return; }   // shield absorbs it
     if(attacker) this.lastHitBy=attacker;
     this.health-=amount; this.hitFlash=1;
@@ -1934,13 +2079,16 @@ class Car{
     this.applyDamageVisual();
   }
   die(){
+    if(!this.alive) return;
     this.alive=false;
+    this.nitroT=this.shieldT=this.dmgT=0;
+    if(this.shieldRing) this.shieldRing.visible=false;
     this.mesh.userData.body.material.color.setHex(0x2a2622);
     if(this.mesh.userData.marker) this.mesh.userData.marker.visible=false;
     const ud=this.mesh.userData;
     if(ud.headlightMat){ ud.headlightMat.emissiveIntensity=0; ud.headlightMat.color.setHex(0x5a5a5a); }
     this.killedByPlayer = !!(this.lastHitBy && this.lastHitBy.isPlayer);
-    if(this.killedByPlayer && this.lastHitBy.alive){ Game.levelWrecks++; banner('WRECK!','+'+WRECK_PTS); pulseHits(); }
+    if(!this.isTow && this.killedByPlayer && this.lastHitBy.alive && Game.state==='playing'){ Game.levelWrecks++; banner('WRECK!','+'+WRECK_PTS); pulseHits(); }
     if(Math.random()<0.5){ this.burning=true; this.explodeTimer=rand(2.5,5.5); }     // some wrecks catch fire
   }
   explode(){
@@ -1949,13 +2097,13 @@ class Car{
     this.mesh.userData.body.material.color.setHex(0x0c0a09);
     this.mesh.userData.cabin.material.color.setHex(0x0c0a09);
     // shockwave: launch & damage nearby cars (can chain-react)
-    for(const o of Game.cars){ if(o===this) continue; const dx=o.x-this.x, dz=o.z-this.z, d=Math.hypot(dx,dz);
+    for(const o of Game.cars){ if(o===this || o.removed) continue; const dx=o.x-this.x, dz=o.z-this.z, d=Math.hypot(dx,dz);
       if(d<13 && d>0.1){ const nx=dx/d,nz=dz/d, f=1-d/13; o.vx+=nx*f*24*o.invMass*CAR.mass; o.vz+=nz*f*24*o.invMass*CAR.mass; o.vy=Math.max(o.vy,f*8);
         if(o.alive) o.damage(f*45, null); } }
     audio.explosion();
     const pd=Game.player?Math.hypot(Game.player.x-this.x,Game.player.z-this.z):99;
     if(pd<24){ Game.shake=Math.max(Game.shake,clamp(1-pd/24,0,1)); damageFlash(clamp(1-pd/24,0,.5)); }
-    if(this.killedByPlayer){ Game.levelFatalities++; fatality(); }    // player-caused explosion = FATALITY + bonus
+    if(!this.isTow && this.killedByPlayer && Game.state==='playing'){ Game.levelFatalities++; fatality(); }    // only active-round competitors earn points
   }
   applyDamageVisual(){
     const t=1-this.health/this.maxHealth, base=this.mesh.userData.baseColor;
@@ -1979,6 +2127,7 @@ class Car{
   }
 
   syncMesh(dt){
+    if(this.removed) return;
     this.mesh.position.set(this.x, this.y, this.z);
     this.mesh.rotation.y=this.angle;
     if(dt>0){ const ax=(this.vx-this.lastVx)/dt, az=(this.vz-this.lastVz)/dt;
@@ -1995,7 +2144,7 @@ class Car{
     if((this.y>0.1||this.airborne) && !this.onRamp) pitch += clamp(-this.vy*0.02,-0.3,0.3);   // on a ramp, match the slope exactly so wheels don't sink in
     this.mesh.rotation.z=this.visRoll; this.mesh.rotation.x=this.alive?pitch:0.06;
     const dip = this.squash*0.22;
-    this.mesh.position.y = (this.alive? this.y - dip : Math.max(this.y-0.12,-0.12));
+    this.mesh.position.y = (this.alive? this.y - dip : Math.max(this.y-0.12,(this.groundY||0)-0.12));
 
     // grounding contact shadow — tighter & darker right under the car so nothing looks pasted-on
     // use groundY so the shadow sits on the sidewalk surface (not below it) when on a raised curb
@@ -2366,6 +2515,7 @@ function resolveCars(A,B,hit){
   const {nx,nz,pen,cx,cz}=hit;
   const rax=cx-A.x,raz=cz-A.z,rbx=cx-B.x,rbz=cz-B.z;
   const [vax,vaz]=pointVel(A,rax,raz),[vbx,vbz]=pointVel(B,rbx,rbz);
+  hit.contribA=Math.max(0,vax*nx+vaz*nz); hit.contribB=Math.max(0,-vbx*nx-vbz*nz); // preserve incoming momentum before the impulse
   let rvx=vbx-vax,rvz=vbz-vaz; const vn=rvx*nx+rvz*nz;
   const corr=Math.max(pen-0.04,0)*0.6/2; A.x-=nx*corr; A.z-=nz*corr; B.x+=nx*corr; B.z+=nz*corr;
   if(vn>0) return 0;
@@ -2411,7 +2561,8 @@ function pulloutBulge(u){
   if(d>=B.halfU) return 0;
   const t=1-d/B.halfU; return B.depth*(t*t*(3-2*t));  // smoothstep: 0 at the bay ends → depth at its centre
 }
-function trackClampBody(o,margin){  // hard outer wall: race track wall, or (city) the buildings beyond the sidewalk
+function trackClampBody(o,margin){  // continuous walls on the paved race circuit only (cars and loose barrels)
+  if(!Game.trackWalls) return 0;    // a road edge without a wall is open terrain
   const pr=Course.project(o.x,o.z);
   const lat=pr.lateral, lim=Course.halfW+Course.sidewalk-margin + (lat>0?pulloutBulge(pr.u):0);   // widen inside the tow bay
   if(Math.abs(lat)<=lim) return 0;
@@ -2421,21 +2572,21 @@ function trackClampBody(o,margin){  // hard outer wall: race track wall, or (cit
   if(vn<0){ const e=(-vn>1.2)?0.3:0; const dv=-(1+e)*vn; o.vx+=wnx*dv; o.vz+=wnz*dv; return Math.abs(vn); }
   return 0;
 }
-// city sidewalk curb: lift the car ~0.06 up when its centre is over the 1-car-wide sidewalk strip
+// Follow the road, city sidewalk, or surrounding terrain on courses with open edges.
 const CURB_H=0.06;
-function cityCurb(c){
+function courseGround(c){
   const pr=c._proj||Course.project(c.x,c.z); const al=Math.abs(pr.lateral);   // reuse the per-frame projection
   const b=pr.lateral>0?pulloutBulge(pr.u):0;                      // the tow bay is widened flat road on the +side
   if(al < Course.halfW+b) c.groundY=0;                            // road (incl. the widened bay)
   else if(al < Course.halfW+Course.sidewalk+b) c.groundY=CURB_H;  // raised sidewalk
-  else c.groundY=-0.5;                                            // off-road grass (sits on the ground plane)
+  else c.groundY=-0.5;                                         // off-road grass or dirt (the ground plane)
 }
 // buildings are SOLID barriers: push the car out of any building's oriented footprint (treated like a wall).
 // expands the box by the car's projected half-size so the car's shell meets the facade. returns impact speed.
 function cityBuildingCollide(c){
-  if(c.y>1.6) return 0;                                   // jumping over (rare) -> ignore
   const [fx,fz]=c.forward(),[rx,rz]=c.right(); let impact=0;
   for(const b of Game.cityBuildings){
+    if(c.y>(b.height??40)) continue; // jumping only clears an obstacle above its actual top
     const dx=c.x-b.x, dz=c.z-b.z;
     if(dx*dx+dz*dz > (b.hw+b.hd+6)*(b.hw+b.hd+6)) continue;       // broad-phase reject
     const lt=dx*b.tx+dz*b.tz, ln=dx*b.nx+dz*b.nz;                 // car centre in building frame (tangent / normal)
@@ -2452,18 +2603,12 @@ function cityBuildingCollide(c){
   }
   return impact;
 }
-// far safety net so a car can't escape the map through a gap; sits well outside the buildings
-function cityFarBound(c){
-  const b=Course.bounds, m=18, minx=b.minx-m, maxx=b.maxx+m, minz=b.minz-m, maxz=b.maxz+m;
-  if(c.x<minx){c.x=minx; if(c.vx<0)c.vx=0;} else if(c.x>maxx){c.x=maxx; if(c.vx>0)c.vx=0;}
-  if(c.z<minz){c.z=minz; if(c.vz<0)c.vz=0;} else if(c.z>maxz){c.z=maxz; if(c.vz>0)c.vz=0;}
-}
 // trees are solid & crashable: push the car's shell radially out of each trunk and bounce it (returns impact speed,
 // which feeds the same damage/sparks/crash path as hitting a wall). works in every level type.
 function treeCollide(c){
-  if(c.y>1.6) return 0;                                   // airborne -> clears the trunk
   const [fx,fz]=c.forward(),[rx,rz]=c.right(); let impact=0;
   for(const t of Game.trees){
+    if(c.y>(t.height??3)) continue;
     const dx=c.x-t.x, dz=c.z-t.z, d2=dx*dx+dz*dz; if(d2>16) continue;        // broad-phase
     let d=Math.sqrt(d2), nx,nz; if(d>1e-3){ nx=dx/d; nz=dz/d; } else { nx=fx; nz=fz; d=0; }
     const carR=CAR.halfLen*Math.abs(fx*nx+fz*nz)+CAR.halfWid*Math.abs(rx*nx+rz*nz);  // car half-extent toward the trunk
@@ -2502,15 +2647,17 @@ const POWERUP_INFO={
   shield:{ color:0x39d7ff, label:'SHIELD' }, damage:{ color:0xff4d4d, label:'2× DMG' },
 };
 
-const Game={ state:'menu', round:1, levelType:'derby', cars:[], player:null,
+const Game={ state:'menu', round:1, levelType:'derby', trackWalls:false, eventType:'standard', eliminationLap:0, cars:[], player:null,
   ramps:[], barrels:[], tires:[], floods:[], powerups:[], cityBuildings:[], trees:[], poleSpots:[], reveal:0, countdown:0, countLast:null, shake:0, paused:false, elapsed:0,
   drift:{score:0, active:false, mult:1, grace:0}, levelDrift:0,
   score:0, levelHits:0, levelWrecks:0, levelFatalities:0, wrongTimer:0, lastBreakdown:null,
-  camSign:1, camRev:false, night:false, dirtTrack:false, gripMult:1, lives:3, playerVehicle:'car',
+  camSign:1, camRev:false, night:false, rain:false, dirtTrack:false, gripMult:1, lives:3, playerVehicle:'car', playerColor:PLAYER_PAINTS[0],
   cash:0, upgrades:Object.fromEntries(PLAYER_TYPES.map(k=>[k,{engine:0,armor:0,ram:0,grip:0}])),
   difficulty:'normal', diff:DIFFICULTY.normal, volume:0.5, progScale:1,
-  towTruck:null, pullout:{x:0,z:0,angle:0}, _timers:[] };
+  championship:{rounds:0,points:{}}, finishSeq:0, towTruck:null, pullout:{x:0,z:0,angle:0}, _hlOn:false, _timers:[] };
 const input={ throttle:0, steer:0, rawSteer:0, hand:false }; const keys={};
+const kbInput={throttle:0,steer:0,hand:false}; let gamepadStartHeld=false;
+const touchPointers=new Map(), touchInput={throttle:0,steer:0,hand:false};
 // Round-scoped timers: anything deferred with setTimeout during a round (explosion particles, crash-sound
 // cascades, the win/lose overlay delay) is registered here and cancelled in startRound, so a blast or a
 // pending overlay from the old round can never leak into the freshly-built next one.
@@ -2521,21 +2668,22 @@ function clearRoundTimeouts(){ for(const id of Game._timers) clearTimeout(id); G
 const SAVE_KEY='bentMetalDerbySave';
 function loadCareer(){
   try{ const s=JSON.parse(localStorage.getItem(SAVE_KEY)); if(!s) return;
-    if(typeof s.cash==='number') Game.cash=s.cash;
+    if(Number.isFinite(s.cash)) Game.cash=Math.max(0,Math.floor(s.cash));
     if(s.upgrades && typeof s.upgrades==='object'){
       for(const vk of PLAYER_TYPES){
         if(s.upgrades[vk] && typeof s.upgrades[vk]==='object')
           for(const u of UPGRADES) Game.upgrades[vk][u.key]=clamp((s.upgrades[vk][u.key])|0,0,UPGRADE_MAX);
       }
     }
-    if(s.difficulty && DIFFICULTY[s.difficulty]){ Game.difficulty=s.difficulty; Game.diff=DIFFICULTY[s.difficulty]; }
-    if(typeof s.volume==='number') Game.volume=clamp(s.volume,0,1);
-    if(s.playerVehicle && VEHICLES[s.playerVehicle]) Game.playerVehicle=s.playerVehicle;
+    if(Object.hasOwn(DIFFICULTY,s.difficulty)){ Game.difficulty=s.difficulty; Game.diff=DIFFICULTY[s.difficulty]; }
+    if(Number.isFinite(s.volume)) Game.volume=clamp(s.volume,0,1);
+    if(PLAYER_TYPES.includes(s.playerVehicle)) Game.playerVehicle=s.playerVehicle;
+    if(PLAYER_PAINTS.includes(s.playerColor)) Game.playerColor=s.playerColor;
   }catch(e){}
 }
 function saveCareer(){
   try{ localStorage.setItem(SAVE_KEY, JSON.stringify({
-    cash:Game.cash, upgrades:Game.upgrades, difficulty:Game.difficulty, volume:Game.volume, playerVehicle:Game.playerVehicle
+    cash:Game.cash, upgrades:Game.upgrades, difficulty:Game.difficulty, volume:Game.volume, playerVehicle:Game.playerVehicle, playerColor:Game.playerColor
   })); }catch(e){}
 }
 
@@ -2566,6 +2714,7 @@ class Powerup{
     this.pillar.position.y=1.5; g.add(this.pillar);
     this.mesh=g; this.mesh.position.set(x,0,z); levelGroup.add(g); }
   step(dt){
+    if(Game.state!=='playing') return;
     if(!this.active){ this.respawn-=dt; if(this.respawn<=0){ this.active=true; this.mesh.visible=true; } return; }
     this.bob+=dt*2; this.icon.position.y=1.6+Math.sin(this.bob)*0.18; this.icon.material.rotation+=dt*1.2;
     const p=Game.player; if(!p||!p.alive) return;
@@ -2599,34 +2748,68 @@ function spawnPowerups(){
   }
 }
 
+// Dispose only resources owned by the departing round. Shared textures, cached geometry, the preview,
+// and the permanent scene stay alive; removing meshes alone leaves their GPU allocations behind.
+function clearRoundScene(){
+  const retired=new Set(), retained=new Set();
+  const keepResource=(value,set)=>{
+    if(!value) return;
+    if(value.isTexture||value.isBufferGeometry){ set.add(value); return; }
+    if(value.isMaterial){
+      set.add(value);
+      for(const v of Object.values(value)) if(v&&v.isTexture) set.add(v);
+      for(const u of Object.values(value.uniforms||{})) if(u.value&&u.value.isTexture) set.add(u.value);
+    }
+  };
+  const collect=(root,set)=>{ if(root) root.traverse(o=>{
+    keepResource(o.geometry,set);
+    for(const m of (Array.isArray(o.material)?o.material:[o.material])) keepResource(m,set);
+  }); };
+  collect(levelGroup,retired);
+  for(const c of Game.cars){
+    for(const root of [c.mesh,c.blob,c.shieldRing]) if(root){ collect(root,retired); scene.remove(root); }
+    for(const h of c.headlights||[]){ scene.remove(h.light); scene.remove(h.target); }
+  }
+  levelGroup.clear(); collect(scene,retained); collect(pvScene,retained);
+  for(const cache of [_rbCache,_tGeo,_tMat,_surfNormals,_cityFacades])
+    for(const value of Object.values(cache)) keepResource(value,retained);
+  for(const value of [tireMat,RIM_FACE_MAT,RIM_HUB_MAT,_dentTex,_dentMaskTex,_blobTex,_skidTex,_softTex,ENV_TEX]) keepResource(value,retained);
+  for(const value of retired) if(!retained.has(value)) value.dispose();
+}
+
 function startRound(r){
   clearRoundTimeouts();   // cancel any explosion/crash/overlay timers still pending from the previous round
+  Game.paused=false; acc=0; clearControls(); Game.camSign=1; Game.camRev=false; Game.shake=0;
   // clear any lingering popovers BEFORE the new scene is built/rendered (e.g. a FATALITY from the last frame of the old level)
   { const ff=$('fatality'); ff.classList.remove('show'); ff.style.opacity=0;
     const bn=$('banner'); bn.style.opacity=0; clearTimeout(banner._t);
     $('wrongway').style.opacity=0; }
-  for(const c of Game.cars){ scene.remove(c.mesh); if(c.blob) scene.remove(c.blob); if(c.shieldRing) scene.remove(c.shieldRing);
-    if(c.headlights) for(const h of c.headlights){ scene.remove(h.light); scene.remove(h.target); } }
+  clearRoundScene();
   if(particles) particles.clear();
   if(skidMarks) skidMarks.reset();
-  levelGroup.clear();
   Game.cars=[]; Game.ramps=[]; Game.barrels=[]; Game.tires=[]; Game.floods=[]; Game.powerups=[]; Game.cityBuildings=[]; Game.trees=[]; Game.poleSpots=[]; Game.roadMat=null; Game.towTruck=null;
-  // each round is a RANDOM arena type (reload to re-roll until you get the one you want)
-  Game.round=r; Game.levelType = ['derby','race','city'][Math.floor(Math.random()*3)];
+  // Random arena each round: derby, race, city, or figure-eight.
+  Game.round=r;
+  const ARENA_TYPES=['derby','race','city','figure8'];
+  Game.levelType=ARENA_TYPES[Math.floor(Math.random()*ARENA_TYPES.length)];
+  Game.trackWalls=false;   // the level builder enables this only when it actually adds continuous track walls
+  Game.eventType='standard'; Game.eliminationLap=0;
   Game.levelHits=0; Game.levelWrecks=0; Game.levelFatalities=0; Game.wrongTimer=0;
   Game.levelDrift=0; Game.drift={score:0, active:false, mult:1, grace:0}; Game.lastBreakdown=null;
   _pairHitCd.clear(); _pairGrind.clear(); _grindSndCd=0;
   Game.night = Math.random()<0.38;                       // some levels run at night
-  Game.dirtTrack = (Game.levelType==='race') && Math.random()<0.45;   // some race levels are loose dirt ovals
-  Game.gripMult = Game.dirtTrack ? 0.72 : 1.0;           // dirt = less grip, more sliding
+  Game.dirtTrack = (Game.levelType==='race'||Game.levelType==='figure8') && Math.random()<0.45; // race loops can roll loose dirt
+  Game.rain = !Game.dirtTrack && Math.random()<0.32;
+  Game.gripMult = Game.dirtTrack ? 0.72 : Game.rain ? 0.82 : 1.0;     // wet asphalt lengthens slides without becoming ice
   if(groundMesh){ groundMesh.material.map = Game.dirtTrack ? groundDirtTex : grassTex; groundMesh.material.needsUpdate=true; }
-  if(r===1){ Game.score=0; Game.lives=3; }  // fresh game (progScale is recomputed unconditionally just below)
+  Game.finishSeq=0;
   // progressive difficulty: every 3 rounds enemies get a touch faster/harder
   // tier 0 = rounds 1-3 (×1.0), tier 1 = rounds 4-6 (×1.07), etc.
   Game.progScale = 1 + Math.floor((r-1)/3) * 0.07;
 
   if(Game.levelType==='derby') buildDerby();
   else if(Game.levelType==='city'){ genCity(); buildCityTrack(); }
+  else if(Game.levelType==='figure8'){ genFigureEight(); buildDirtTrack(!Game.dirtTrack); }
   else if(Game.dirtTrack){ genDirtTrack(); buildDirtTrack(); }   // dirt race = rally loop w/ a drift hairpin
   else { genTrack(); Course.setPolar(); buildRaceTrack(); }
   spawnPowerups();
@@ -2635,7 +2818,7 @@ function startRound(r){
   const opponents = Math.min(3 + r + Game.diff.extra, 7);   // harder difficulty fields one more rival
   const total = opponents+1;
   for(let i=0;i<total;i++){
-    const isP=(i===0); const color=isP?0xff7b29:PALETTE[i%PALETTE.length];
+    const isP=(i===0); const color=isP?Game.playerColor:PALETTE[i%PALETTE.length];
     const vType = isP ? Game.playerVehicle : ENEMY_TYPES[Math.floor(Math.random()*ENEMY_TYPES.length)];   // enemies are a random mix of all classes
     const car=new Car(color,isP, isP?'YOU':NAMES[(i-1)%NAMES.length], vType);
     if(!isP){
@@ -2659,16 +2842,19 @@ function startRound(r){
     tow.reset(Game.pullout.x,Game.pullout.z,Game.pullout.angle);
     Game.cars.push(tow); Game.towTruck=tow; }
   Game.state='countdown'; Game.countdown=3.2; Game.countLast=null; Game.elapsed=0;
-  const modeName = Game.levelType==='derby'?'DERBY' : Game.levelType==='city'?'CITY' : 'RACE';
-  document.getElementById('roundLabel').textContent = 'ROUND '+r+' · '+modeName;
+  audio.resume();
+  if(Game.player) audio.engine(0,0,false,Game.player.enginePitch,Game.player.engineLump); // restart at idle for the countdown
+  const modeName = Game.levelType==='derby'?'DERBY' : Game.levelType==='city'?'CITY' : Game.levelType==='figure8'?(Game.dirtTrack?'DIRT FIGURE 8':'FIGURE 8'):'RACE';
+  document.getElementById('roundLabel').textContent = 'ROUND '+r+' · '+(Game.eventType==='elimination'?'ELIMINATION':modeName);
   setHudMode();
   // DON'T reveal yet — keep the loading screen covering the scene until the loop has actually drawn the new
   // level (see the reveal countdown at the end of loop()). This guarantees the track is fully painted first.
   Game.reveal=2;
-  const sub = opponents+' RIVALS';
-  banner(Game.levelType==='derby' ? 'DERBY'
+  const sub = opponents+' RIVALS'+(Game.rain?' · WET':'');
+  banner(Game.eventType==='elimination' ? 'ELIMINATION · 3 LAPS'
+       : Game.levelType==='derby' ? 'DERBY'
        : Game.levelType==='city'  ? 'CITY · 3 LAPS'
-       : ((Game.dirtTrack?'DIRT RACE':'RACE')+' · 3 LAPS'), sub);
+       : ((Game.levelType==='figure8'?(Game.dirtTrack?'DIRT FIGURE 8':'FIGURE 8'):Game.dirtTrack?'DIRT RACE':'RACE')+' · 3 LAPS'), sub);
 }
 function aliveCars(){ return Game.cars.filter(c=>c.alive && !c.isTow); }   // the tow truck is a service vehicle, not a competitor — don't count it
 
@@ -2737,7 +2923,7 @@ function driveDerbyAI(c,dt){
 function driveRaceAI(c,dt){
   const rec=aiStuckRecovery(c,dt); if(rec) return rec;
   // PRIMARY GOAL: follow the racing line (works for the smooth oval AND the rectilinear city loop)
-  const pr=Course.project(c.x,c.z);
+  const pr=projectCourseForCar(c);
   const lookU = Course.mode==='polar' ? 0.0223 : Math.min(0.06, 9/Course.total);
   const ah=Course.at(pr.u+lookU); const adx=ah.cx-c.x, adz=ah.cz-c.z; const desired=Math.atan2(adx,adz);
   let diff=desired-c.angle; while(diff>Math.PI)diff-=TAU; while(diff<-Math.PI)diff+=TAU;
@@ -2795,6 +2981,7 @@ function driveTowAI(c,dt){
   // can be re-acquired later. MUST run on every exit path — the old code leaked the flag when a pickup was
   // abandoned, permanently freezing that wreck out of collisions and out of the tow queue.
   const drop=()=>{ if(ts.target) ts.target.beingTowed=false; ts.target=null; };
+  if(!c.alive){ drop(); ts.mode='idle'; return {throttle:0,steer:0,hand:false}; }
 
   // Only watch for "stuck" while the tow is actually trying to GO somewhere: chasing/towing a wreck, or
   // driving back to the pullout from a distance. When it's parked & idling at the pullout its speed is ~0 by
@@ -2825,15 +3012,28 @@ function driveTowAI(c,dt){
     else ctrl.throttle=clamp((1-Math.abs(diff)*0.28)*topThrottle, 0.08, topThrottle);
     return dist;
   }
-  // FOLLOW THE TRACK toward (tx,tz) at an outer offset — off the racing line but inside the tyres/walls — so
-  // the heavy tow doesn't cut straight across corners into walls. Aims at a look-ahead point on the outer lane,
-  // taking the shorter way round the loop. Returns straight-line distance to the real target.
+  // FOLLOW THE TRACK in the racing direction, using the right-hand traffic lane. The tow is deliberately a
+  // slow-moving part of race traffic: racers may have to pass it, but it never aims at a living car. As the
+  // destination comes up ahead, blend toward its lateral position over a long approach instead of making a
+  // last-second diagonal cut across the road.
   function towTrackSteer(tx,tz,topThrottle){
     const prC=Course.project(c.x,c.z);
+    const prT=Course.project(tx,tz);
     const look=(Course.mode==='polar')?0.024:Math.min(0.08,12/Course.total);
     const a=Course.at(prC.u+look);                                        // ALWAYS look ahead in the racing direction:
                                                                           // circulate with traffic (no U-turns, no head-ons)
-    const off=Course.halfW-6;                                             // outer lane: off the racing line, real margin from the tyres
+    const rightLane=clamp(Course.halfW*0.36,3.5,5.5);                     // +normal is the right side in course direction
+    let forwardU=(prT.u-prC.u+1)%1;
+    const approachU=Course.mode==='polar'?0.105:Math.min(0.18,34/Course.total);
+    // Only converge on a destination that is genuinely ahead. A target just behind us is reached next lap,
+    // not by spinning across oncoming traffic. Keep enough wall margin for the truck plus its towed wreck.
+    let off=rightLane;
+    if(forwardU<approachU){
+      const blend=1-clamp(forwardU/approachU,0,1);
+      const targetLat=clamp(prT.lateral,-Course.halfW+4.5,
+        Course.halfW+Math.max(0,pulloutBulge(prT.u))-4.5);
+      off=lerp(rightLane,targetLat,blend*blend*(3-2*blend));
+    }
     const ax=a.cx+a.nx*off, az=a.cz+a.nz*off;
     const dx=ax-c.x, dz=az-c.z; let desired=Math.atan2(dx,dz); let diff=desired-c.angle;
     while(diff>Math.PI)diff-=TAU; while(diff<-Math.PI)diff+=TAU;
@@ -2841,23 +3041,36 @@ function driveTowAI(c,dt){
     ctrl.throttle=clamp((1-Math.abs(diff)*0.25)*topThrottle, 0.5, topThrottle);   // keep it moving so it never crawls below its stuck-speed
     return Math.hypot(tx-c.x, tz-c.z);
   }
-  // In the open derby pit, or once we're within ~16 units, drive STRAIGHT in (hook up / peel into the bay).
-  // On a race/city/dirt loop while still far, follow the track instead of cutting across it.
+  // In the open derby pit drive directly. On a circuit, remain in traffic until already very close; the long
+  // lateral blend above handles the approach, so this final hook-up movement cannot become a cross-road skid.
   function navigate(tx,tz,topThrottle){
     const dist=Math.hypot(tx-c.x, tz-c.z);
-    if(Game.levelType==='derby' || dist<16) return steerTo(tx,tz,topThrottle);
+    if(Game.levelType==='derby' || dist<7.5) return steerTo(tx,tz,topThrottle);
+    if(!Game.trackWalls){ const targetRoad=Course.project(tx,tz);
+      if(Math.hypot(c.x-targetRoad.cx,c.z-targetRoad.cz)<25) return steerTo(tx,tz,topThrottle); }
     return towTrackSteer(tx,tz,topThrottle);
+  }
+  // With nothing to collect, stay mobile as a slow service vehicle instead of parking in the pullout. On a
+  // circuit this keeps the truck in the right lane and in the racers' world without targeting any one racer.
+  // The derby has no lanes, so patrol a broad circle around the pit.
+  function patrol(){
+    if(Game.levelType!=='derby'){
+      const pr=Course.project(c.x,c.z), ahead=Course.at(pr.u+0.25);
+      return towTrackSteer(ahead.cx,ahead.cz,0.52);
+    }
+    const u=Math.atan2(c.z,c.x)+0.55, r=WALL_R*0.58;
+    return steerTo(Math.cos(u)*r,Math.sin(u)*r,0.48);
   }
   const towable=o=>!o.alive&&!o.isTow&&!o.beingTowed&&o.mesh&&o.mesh.visible;
   switch(ts.mode){
     case 'idle':{
       ts.idleTimer=(ts.idleTimer||0)-dt;
-      if(ts.idleTimer>0){ navigate(Game.pullout.x,Game.pullout.z,0.30); break; }
+      if(ts.idleTimer>0){ patrol(); break; }
       // pick the NEAREST towable wreck (old code took the first in list order → long pointless drives)
       let best=null,bd=1e18;
       for(const o of Game.cars){ if(!towable(o)) continue; const d=(o.x-c.x)**2+(o.z-c.z)**2; if(d<bd){ bd=d; best=o; } }
       if(best){ ts.target=best; ts.mode='pickup'; ts.idleTimer=0; ts.pickupT=0; }
-      else{ ts.idleTimer=0.8; navigate(Game.pullout.x,Game.pullout.z,0.30); }
+      else{ ts.idleTimer=0.8; patrol(); }
       break; }
     case 'pickup':{
       ts.pickupT=(ts.pickupT||0)+dt;
@@ -2872,6 +3085,7 @@ function driveTowAI(c,dt){
       const dist=navigate(Game.pullout.x,Game.pullout.z,0.70);     // follow the track back, then peel into the bay
       if(dist<6){
         // arrived — hide the wreck, kill its fire/smoke (no plume left floating in the yard) and release it
+        ts.target.removed=true; // removed wrecks must leave physics as well as the scene
         if(ts.target.mesh) ts.target.mesh.visible=false;
         if(ts.target.blob) ts.target.blob.visible=false;
         ts.target.burning=false; ts.target.exploded=true;   // stop fire particles + the pending explosion
@@ -2887,7 +3101,8 @@ function driveTowAI(c,dt){
 /* ---------------- physics tick ---------------- */
 const _thisPairs=new Map();     // reused each tick (cleared, not reallocated) — physics runs up to 6×/frame
 function physicsStep(dt,controls){
-  if(Game.levelType==='city') for(const c of Game.cars) cityCurb(c);   // set curb height before integrating
+  for(const [pk,cd] of _pairHitCd){ if(cd<=dt) _pairHitCd.delete(pk); else _pairHitCd.set(pk,cd-dt); }
+  if(Game.levelType!=='derby' && !Game.trackWalls) for(const c of Game.cars) courseGround(c);   // follow open terrain before integrating
   for(let i=0;i<Game.cars.length;i++) Game.cars[i].step(dt,controls[i]);
   // glue the towed wreck directly behind the truck EVERY substep (not once per frame) so it can't drift on
   // its own decaying velocity between substeps — it's exempt from clamping below, so this is its only mover.
@@ -2900,6 +3115,7 @@ function physicsStep(dt,controls){
   for(let iter=0;iter<3;iter++){
     for(let i=0;i<Game.cars.length;i++) for(let k=i+1;k<Game.cars.length;k++){
       const A=Game.cars[i],B=Game.cars[k];
+      if(A.removed || B.removed) continue;
       if(Math.abs(A.y-B.y)>1.3) continue;                 // one is jumping over the other
       if((A.x-B.x)**2+(A.z-B.z)**2>36) continue;
       const hit=obbCollide(A,B);
@@ -2913,12 +3129,12 @@ function physicsStep(dt,controls){
         }
       }
     }
-    // boundary: derby = round wall, race = track wall, city = buildings are the barriers (off-road is open grass)
+    // Only visible barriers block movement; open road edges and the map bounds do not.
     for(const c of Game.cars){
-      if(c.beingTowed) continue;                                  // tow truck controls position; skip clamping
+      if(c.beingTowed || c.removed) continue;                     // tow truck controls position; removed wrecks have no collider
       let cs = (Game.levelType==='derby') ? wallCollide(c)
-               : (Game.levelType==='city')  ? (cityFarBound(c), cityBuildingCollide(c))
                : trackClampBody(c,1.4);
+      if(Game.cityBuildings.length) cs=Math.max(cs, cityBuildingCollide(c)); // buildings and grandstands stay solid
       if(Game.trees.length) cs=Math.max(cs, treeCollide(c));     // trees are crashable barriers in every level
       if(iter===0 && cs>6){ c.damage(clamp((cs-6)*0.55,0,16), null);
         particles.sparks(c.x,0.8,c.z,Math.floor(cs*0.5));
@@ -2926,14 +3142,14 @@ function physicsStep(dt,controls){
     }
     // ramps & tyre bumpers enforced EVERY iteration (like the wall) so a car shoved into one is pushed
     // straight back out — this applies equally to enemies, who otherwise got rammed inside a ramp
-    if(Game.ramps.length) for(const c of Game.cars) rampInteract(c);   // dead cars also need slope+wall collision so wrecks don't clip inside ramps
-    if(Game.tires.length) for(const c of Game.cars) tireBounce(c);
+    if(Game.ramps.length) for(const c of Game.cars) if(!c.removed) rampInteract(c);   // visible wrecks still collide
+    if(Game.tires.length) for(const c of Game.cars) if(!c.removed) tireBounce(c);
     for(const c of Game.cars) c.omega=clamp(c.omega,-5.5,5.5);
   }
   // ---- per-pair impact / grind dispatch (once per tick, after all 3 iters) ----
   _grindSndCd=Math.max(0,_grindSndCd-dt);
   for(const [pk,{A,B,closing,hit}] of _thisPairs){
-    let cd=(_pairHitCd.get(pk)||0)-dt;
+    let cd=_pairHitCd.get(pk)||0;
     if(closing>=HIT_THRESHOLD && cd<=0){
       // genuine impact: reset grind accumulator so grind can't immediately fire after a hit
       _pairGrind.delete(pk);
@@ -3071,6 +3287,7 @@ function barrelRampCollide(b){
 }
 function collideBarrel(b){
   for(const c of Game.cars){
+    if(c.removed) continue;
     if(Math.abs(c.y-b.y)>1.5) continue;
     const dx=b.x-c.x, dz=b.z-c.z, d=Math.hypot(dx,dz), R=1.8+b.r;
     if(d<R && d>1e-3){ const nx=dx/d, nz=dz/d, pen=R-d; b.x+=nx*pen; b.z+=nz*pen;
@@ -3088,10 +3305,9 @@ function registerImpact(A,B,hit,closing){
   // base energy of the collision, offset by a small dead-zone below HIT_THRESHOLD
   const base=clamp((closing-HIT_THRESHOLD*0.4)*1.0,0,60);
   // each car's contribution to the relative closing velocity along the contact normal
-  const contribA=clamp( A.vx*hit.nx+A.vz*hit.nz, 0, closing);   // how fast A was closing
-  const contribB=clamp(-(B.vx*hit.nx+B.vz*hit.nz), 0, closing); // how fast B was closing
-  const fracA=closing>0?contribA/closing:0.5;  // A's share of closing energy → hurts B
-  const fracB=closing>0?contribB/closing:0.5;  // B's share → hurts A
+  const contribA=hit.contribA, contribB=hit.contribB, incoming=contribA+contribB;
+  const fracA=incoming>0?contribA/incoming:0.5;  // A's share of incoming energy → hurts B
+  const fracB=incoming>0?contribB/incoming:0.5;
   // ---- zone: where on EACH car was the contact? ----
   // Rear = most vulnerable (1.6×), front = structural protection (0.65×), side = 1.25×, top = neutral
   function zoneOf(car){
@@ -3122,7 +3338,7 @@ function registerImpact(A,B,hit,closing){
   const isHit=closing>HIT_MIN;
   const aggressor=fracA>=fracB?A:B, victim=aggressor===A?B:A;
   const zone=aggressor===A?zB.zone:zA.zone;
-  if(aggressor.isPlayer&&victim.alive&&isHit&&Game.elapsed-victim.lastScoredHit>0.4){
+  if(Game.state==='playing'&&aggressor.isPlayer&&!victim.isTow&&victim.alive&&isHit&&Game.elapsed-victim.lastScoredHit>0.4){
     victim.lastScoredHit=Game.elapsed; Game.levelHits++; pulseHits();
     if(zone==='REAR'&&closing>12) banner('CRITICAL!','REAR HIT');
   }
@@ -3145,7 +3361,8 @@ function bankDrift(){ const D=Game.drift; if(!D.active) return;
 }
 function updateDrift(dt){
   const p=Game.player; if(!p) return; const D=Game.drift;
-  if(!Game.dirtTrack || !p.alive || p.y>0.3){ if(D.active) bankDrift(); return; }
+  if(!p.alive){ D.active=false; D.score=0; D.mult=1; D.grace=0; return; }
+  if(!Game.dirtTrack || p.y>0.3){ if(D.active) bankDrift(); return; }
   const [rx,rz]=p.right(); const slip=Math.abs(p.vx*rx+p.vz*rz);
   const sliding = p.speed>8 && slip>4.5 && Math.abs(p.omega)<4.6;
   if(sliding){
@@ -3156,35 +3373,49 @@ function updateDrift(dt){
     else { D.grace-=dt; if(D.grace<=0) bankDrift(); }
   }
 }
-function updateRaceProgress(){
-  const p=Game.player; let pu=null;
+function updateRaceProgress(dt=1/60){
+  const p=Game.player, finishers=[]; let playerDelta=0;
   for(const c of Game.cars){
     if(c.isTow || !c.alive) continue;                    // the tow truck isn't racing; frozen wrecks don't advance
-    const u=Course.project(c.x,c.z).u; let d=u-c.prevU; if(d>0.5)d-=1; if(d<-0.5)d+=1;   // normalised lap units
-    c.cumU+=d; c.prevU=u; c.laps=Math.max(0,Math.floor(c.cumU));
-    if(c.cumU>=Course.laps) c.finished=true;
-    if(c===p) pu=u;                                       // reuse the player's single projection below (no re-project)
+    const u=projectCourseForCar(c).u; let d=u-c.prevU; if(d>0.5)d-=1; if(d<-0.5)d+=1;   // branch-aware on the figure-eight crossover
+    c.prevU=u;
+    if(!c.finished){
+      const before=c.cumU; c.cumU+=d; c.laps=Math.max(0,Math.floor(c.cumU));
+      if(c.cumU>=Course.laps && d>0){ finishers.push({c,at:(Course.laps-before)/d}); c.cumU=Course.laps; c.laps=Course.laps; }
+    }
+    if(c===p) playerDelta=d;
   }
-  // wrong-way warning for the player (uses the projection already computed in the loop)
-  if(pu!=null){
-    if(p.speed>5){ let d=pu-p.prevUWarn; if(d>0.5)d-=1; if(d<-0.5)d+=1;
-      Game.wrongTimer = d<-0.00013 ? Game.wrongTimer+0.016 : 0; }
-    p.prevUWarn=pu;
+  // Interpolate crossings within this frame, so array order cannot decide a close finish.
+  finishers.sort((a,b)=>a.at-b.at);
+  for(const {c} of finishers){ c.finished=true; c.finishOrder=++Game.finishSeq; }
+  if(Game.eventType==='elimination'){
+    const active=Game.cars.filter(c=>!c.isTow&&c.alive&&!c.finished), lead=Math.max(0,...active.map(c=>c.cumU));
+    const lap=Math.min(Course.laps-1,Math.floor(lead));
+    if(lap>Game.eliminationLap && active.length>1){ Game.eliminationLap=lap;
+      const last=active.reduce((a,b)=>a.cumU<b.cumU?a:b); last.health=0; last.die();
+      banner(last.isPlayer?'ELIMINATED!':last.name+' ELIMINATED','LAST PLACE'); }
   }
-  document.getElementById('wrongway').style.opacity = (Game.wrongTimer>0.5 && p.alive && !p.finished)?1:0;
+  Game.wrongTimer = p&&p.alive&&!p.finished&&p.speed>5&&playerDelta<-0.00001 ? Game.wrongTimer+dt : 0;
+  const ww=document.getElementById('wrongway'); if(ww) ww.style.opacity = Game.wrongTimer>0.5?1:0;
 }
 function progress(c){ return c.cumU; }
-function playerPlace(){ return 1 + Game.cars.filter(c=>c!==Game.player && !c.isTow && (c.alive||c.finished) && progress(c)>progress(Game.player)).length; }   // wrecked-and-never-finished rivals don't outplace you
+function raceOrder(a,b){
+  if(a.finished&&b.finished) return a.finishOrder-b.finishOrder;
+  if(a.finished) return -1; if(b.finished) return 1;
+  return (b.alive-a.alive) || progress(b)-progress(a);
+}
+function playerPlace(){ return 1 + Game.cars.filter(c=>c!==Game.player && !c.isTow && (c.alive||c.finished) && raceOrder(c,Game.player)<0).length; }
 function ordinal(n){ return n===1?'1ST':n===2?'2ND':n===3?'3RD':n+'TH'; }
 
 function checkLevelEnd(){
   if(Game.state!=='playing') return;
-  if(!Game.player.alive){ endGameOver(); return; }
+  if(!Game.player || !Game.player.alive){ if(!Game.player) return; endGameOver(); return; }
   const aliveOthers=Game.cars.filter(c=>c!==Game.player && c.alive && !c.isTow);
   if(Game.levelType==='derby'){
     if(aliveOthers.length===0) completeLevel(1,1,true,'LAST CAR RUNNING',WIN_BONUS,true);
   }else{
-    if(aliveOthers.length===0){ completeLevel(1,1,true,'LAST CAR RUNNING',WIN_BONUS,true); return; }
+    const rivalFinished=Game.cars.some(c=>c!==Game.player&&!c.isTow&&c.finished);
+    if(aliveOthers.length===0 && !rivalFinished){ completeLevel(1,1,true,'LAST CAR RUNNING',WIN_BONUS,true); return; }
     if(Game.player.finished){                          // race only ends when YOU cross the line (or all rivals are dead)
       const place=playerPlace();
       const mult = place===1?1 : place===2?0.5 : place===3?0.25 : 0;
@@ -3194,17 +3425,19 @@ function checkLevelEnd(){
 }
 function completeLevel(place,mult,won,title,bonus,standing){
   Game.state='roundwon';
+  audio.cutEngine();
   bankDrift();                                            // cash in any slide still in progress
   const earned=Game.levelHits*HIT_PTS + Game.levelWrecks*WRECK_PTS + Game.levelFatalities*FATALITY_PTS;
   const banked=Math.round(earned*mult)+bonus;
   Game.score+=banked;
+  recordChampionship();
   const freeLife = won;                                   // winning (1st place / last car running) earns a life
   if(freeLife) Game.lives++;
   // career cash: a cut of what you banked, plus a finishing bonus -> spend it in the garage
-  const cashEarned=Math.round((banked+Game.levelDrift)*0.12)+(won?300:0)+Game.levelWrecks*40+Game.levelFatalities*60;
+  const raceLoss=(Game.levelType!=='derby') && !standing && mult===0;
+  const cashEarned=raceLoss?0:Math.round((banked+Game.levelDrift)*0.12)+(won?300:0)+Game.levelWrecks*40+Game.levelFatalities*60;
   Game.cash+=cashEarned; saveCareer();
   // 4th-or-worse in a race = loss: no payout, prompt to spend a life to retry
-  const raceLoss=(Game.levelType!=='derby') && !standing && mult===0;
   Game.lastBreakdown={ place,mult,won,title,earned,bonus,banked,standing,freeLife,cashEarned, drift:Game.levelDrift,
     hits:Game.levelHits,wrecks:Game.levelWrecks,fatalities:Game.levelFatalities,
     race:(Game.levelType!=='derby'), raceLoss };
@@ -3212,7 +3445,25 @@ function completeLevel(place,mult,won,title,bonus,standing){
   if(raceLoss){ banner('RACE LOST','',3000); roundTimeout(showLose,3000); }
   else{ banner(won?'WINNER! +1 LIFE':title,'',3000); roundTimeout(showWin,3000); }
 }
-function endGameOver(){ Game.state='gameover'; banner(Game.lives>0?'WRECKED':'GAME OVER','',3000); roundTimeout(showLose,3000); }
+function recordChampionship(){
+  const C=Game.championship;
+  if(C.lastRound===Game.round){
+    for(const [name,pts] of Object.entries(C.lastAwards||{})) C.points[name]-=pts;
+  }else C.rounds++;
+  C.lastRound=Game.round; C.lastAwards={}; // a retry replaces this round's result instead of duplicating or ignoring it
+  let order=Game.cars.filter(c=>!c.isTow);
+  if(Game.levelType==='derby') order.sort((a,b)=>(b.alive-a.alive)||(b.health-a.health)||(b.cumU-a.cumU));
+  else order.sort(raceOrder);
+  order.forEach((c,i)=>{ const pts=CHAMP_POINTS[i]||0; C.lastAwards[c.name]=pts; C.points[c.name]=(C.points[c.name]||0)+pts; });
+}
+function championshipRows(){
+  const entries=Object.entries(Game.championship.points).sort((a,b)=>b[1]-a[1]);
+  if(!entries.length)return '';
+  let h='<div class="line" style="margin-top:10px;color:var(--accent)"><span>CHAMPIONSHIP</span><span>PTS</span></div>';
+  entries.slice(0,6).forEach(([name,pts],i)=>h+=boardRow((i+1)+'. '+name,pts,name!=='YOU'));
+  return h;
+}
+function endGameOver(){ Game.state='gameover'; audio.cutEngine(); recordChampionship(); banner(Game.lives>0?'WRECKED':'GAME OVER','',3000); roundTimeout(showLose,3000); }
 
 /* ====================================================================
    CAMERA
@@ -3251,8 +3502,12 @@ function banner(big,sub,hold){ $('bannerBig').textContent=big; $('bannerSub').te
 function pulseHits(){ const r=$('hitsRow'); r.classList.add('flash'); clearTimeout(pulseHits._t); pulseHits._t=setTimeout(()=>r.classList.remove('flash'),140); }
 function fatality(){ const f=$('fatality'); f.classList.remove('show'); void f.offsetWidth; f.classList.add('show'); banner('FATALITY!','+'+FATALITY_PTS); }
 function damageFlash(amt){ amt=clamp(amt,0,1); const f=$('flash'); f.style.boxShadow=`inset 0 0 160px 50px rgba(255,0,0,${amt*0.6})`;
+  rumble(clamp(amt,0.12,1),70+amt*130);
   clearTimeout(damageFlash._t); damageFlash._t=setTimeout(()=>f.style.boxShadow='inset 0 0 160px 40px rgba(255,0,0,0)',80); }
-function showOverlay(which){ for(const id of ['startScreen','winScreen','loseScreen','pauseScreen','garageScreen','loadingScreen']) $(id).classList.add('hidden'); if(which) $(which).classList.remove('hidden'); }
+function showOverlay(which){
+  for(const id of ['startScreen','winScreen','loseScreen','pauseScreen','garageScreen','loadingScreen']) $(id).classList.add('hidden');
+  if(which){ const overlay=$(which); overlay.scrollTop=0; overlay.classList.remove('hidden'); overlay.scrollTop=0; }
+}
 
 function boardRow(label,val,dim){ return `<div class="line"><span class="${dim?'dim':''}">${label}</span><span>${val}</span></div>`; }
 function buildVehChips(containerId){
@@ -3299,7 +3554,7 @@ function showWin(){
   if(b.drift) html+=`<div class="line"><span class="dim">Drift points 🏁</span><span style="color:#ffb869">+${b.drift.toLocaleString()}</span></div>`;
   if(b.cashEarned) html+=`<div class="line"><span class="dim">Garage cash earned</span><span style="color:var(--gold)">+$${b.cashEarned.toLocaleString()}</span></div>`;
   html+=`<div class="line" style="margin-top:8px"><span class="dim">Total score</span><span style="color:var(--gold)">${Game.score.toLocaleString()}</span></div>`;
-  $('winBoard').innerHTML=html; refreshCashTags(); buildWinVehChips(); showOverlay('winScreen'); hud(false);
+  html+=championshipRows(); $('winBoard').innerHTML=html; refreshCashTags(); buildWinVehChips(); showOverlay('winScreen'); hud(false);
 }
 function showLose(){
   const bd=Game.lastBreakdown, raceLoss=bd&&bd.raceLoss;
@@ -3313,7 +3568,7 @@ function showLose(){
       boardRow('Finish position',ordinal(bd.place),true)+
       boardRow('Hits landed',bd.hits+' × '+HIT_PTS,true)+
       boardRow('Cars wrecked',bd.wrecks+' × '+WRECK_PTS,true)+
-      `<div class="line total"><span>Score</span><span>${Game.score.toLocaleString()}</span></div>`;
+      `<div class="line total"><span>Score</span><span>${Game.score.toLocaleString()}</span></div>`+championshipRows();
   }else{
     $('loseTitle').textContent=canContinue?'WRECKED':'GAME OVER';
     $('loseSub').textContent=canContinue?'Spend a life to continue':'Out of lives — head home to run it back';
@@ -3321,7 +3576,7 @@ function showLose(){
     $('loseBoard').innerHTML=
       boardRow('Round reached','#'+Game.round,true)+
       boardRow('Lives left',canContinue?('♥'.repeat(Game.lives)):'0',true)+
-      `<div class="line total"><span>Score</span><span>${Game.score.toLocaleString()}</span></div>`;
+      `<div class="line total"><span>Score</span><span>${Game.score.toLocaleString()}</span></div>`+championshipRows();
   }
   buildLoseVehChips(); showOverlay('loseScreen'); hud(false);
 }
@@ -3384,7 +3639,7 @@ function drawMinimap(){
   for(const pu of Game.powerups){ if(!pu.active) continue; mm.fillStyle='#'+POWERUP_INFO[pu.type].color.toString(16).padStart(6,'0');
     mm.beginPath(); mm.arc(OX+pu.x*sc,OY+pu.z*sc,2.6,0,7); mm.fill(); }
   // cars (player shows a heading tick)
-  for(const c of Game.cars){ const mx=OX+c.x*sc, my=OY+c.z*sc;
+  for(const c of Game.cars){ if(c.removed) continue; const mx=OX+c.x*sc, my=OY+c.z*sc;
     mm.fillStyle=c.isPlayer?(c.alive?'#fff':'#777'):c.isTow?'#ffaa00':(c.alive?'#ff5a5a':'#555');
     mmDot(mx,my,c.isPlayer?4.5:c.isTow?4.0:3.2, c.isPlayer&&c.alive?c.angle:undefined); }
 }
@@ -3440,9 +3695,11 @@ let audioAcc=1, hudAcc=1, mapAcc=1, hlAcc=1, nightAcc=1;   // start >= interval 
 const AUDIO_DT=1/30, HUD_DT=0.1, MAP_DT=0.5, HL_DT=1/30, NIGHT_DT=0.08;   // engine/wind ~30Hz, HUD ~10Hz, minimap 2Hz, headlights 30Hz, stars 12Hz
 function loop(){
   requestAnimationFrame(loop);
-  let dt=clock.getDelta(); if(dt>0.05) dt=0.05; Game.elapsed+=dt;
+  const frameDt=clock.getDelta(), dt=Math.min(frameDt,0.05);
+  pollGamepad();
+  if(!Game.paused && Game.state!=='menu' && Game.state!=='loading') Game.elapsed+=dt;
 
-  if(Game.state==='countdown'){ Game.countdown-=dt; const n=Math.ceil(Game.countdown-0.2);
+  if(Game.state==='countdown' && !Game.paused){ Game.countdown-=dt; const n=Math.ceil(Game.countdown-0.2);
     if(Game.countdown<=0){ Game.state='playing'; banner('GO!',''); }
     else if(n!==Game.countLast){ Game.countLast=n; if(n>0) banner(String(n),''); } }
 
@@ -3451,7 +3708,7 @@ function loop(){
     { const raw=input.rawSteer;
       if(raw!==0){
         if(input.steer!==0 && Math.sign(raw)!==Math.sign(input.steer)) input.steer=0;
-        input.steer = clamp(input.steer + raw*dt/1.0, -1, 1);
+        input.steer += clamp(raw-input.steer, -dt, dt); // preserve partial analog steering instead of drifting to full lock
       } else {
         const dec=dt/0.25;
         input.steer = input.steer>0 ? Math.max(0,input.steer-dec) : Math.min(0,input.steer+dec);
@@ -3465,9 +3722,9 @@ function loop(){
         : (Game.levelType==='derby' ? driveDerbyAI(c,dt) : driveRaceAI(c,dt));
     }
     const controls=_ctrlArr;
-    // one course projection per car per FRAME (reused by the grass bog + sidewalk curb across all physics
+    // one course projection per car per FRAME (reused by grass drag + ground height across all physics
     // substeps). project() scans the whole city polyline, so this replaces up to 6×2 scans/car with one.
-    if(Game.levelType==='city') for(const c of Game.cars) c._proj=Course.project(c.x,c.z);
+    if(Game.levelType!=='derby' && !Game.trackWalls) for(const c of Game.cars) c._proj=Course.project(c.x,c.z);
     acc+=dt; let sub=0; while(acc>=FIXED_DT&&sub<MAX_SUB){ physicsStep(FIXED_DT,controls); acc-=FIXED_DT; sub++; } if(sub===MAX_SUB) acc=0;
 
     // flash the tow truck's warning lights amber whenever it's working (pickup/towing) — per-frame is fine.
@@ -3485,7 +3742,15 @@ function loop(){
         if(slip>3.6 || braking){                        // sliding/drifting/braking -> tyre smoke + lasting skid marks
           c.dustTimer=0.03; const bx=c.x-fx*1.45, bz=c.z-fz*1.45;
           particles.skid(bx-rx*0.9, bz-rz*0.9); particles.skid(bx+rx*0.9, bz+rz*0.9);
-          if(skidMarks){ const gy=c.groundY||0; skidMarks.add(bx-rx*0.9, bz-rz*0.9, gy, c.angle); skidMarks.add(bx+rx*0.9, bz+rz*0.9, gy, c.angle); }
+          if(skidMarks){
+            const gy=c.groundY||0;
+            const lx=bx-rx*0.9, lz=bz-rz*0.9;
+            const rwx=bx+rx*0.9, rwz=bz+rz*0.9;
+            const [lvx,lvz]=pointVel(c, lx-c.x, lz-c.z);
+            const [rvx,rvz]=pointVel(c, rwx-c.x, rwz-c.z);
+            skidMarks.add(lx, lz, gy, Math.atan2(lvx, lvz));
+            skidMarks.add(rwx, rwz, gy, Math.atan2(rvx, rvz));
+          }
         } else if(c.speed > (Game.dirtTrack?5:10)){    // loose dirt kicks up a much dustier rooster tail
           c.dustTimer = Game.dirtTrack?0.04:0.06;
           const n = Game.dirtTrack?3:1;
@@ -3494,25 +3759,29 @@ function loop(){
       } }
 
     for(const c of Game.cars) c.syncMesh(dt);
+    if(Game.rain && rainField){ const a=rainField.geometry.attributes.position, v=a.array;
+      rainField.position.set(camera.position.x,0,camera.position.z);
+      for(let i=1;i<v.length;i+=3){ v[i]-=dt*48; if(v[i]<-3)v[i]+=40; }
+      a.needsUpdate=true; }
     particles.update(dt); updateCamera(dt); updateSunShadow();
     hlAcc+=dt; if(hlAcc>=HL_DT){ hlAcc=0; updateHeadlight(); }
     if(Game.night){ nightAcc+=dt; if(nightAcc>=NIGHT_DT){ nightAcc=0; twinkleNightSky(Game.elapsed); } }
-    if(Game.levelType!=='derby' && Game.state==='playing') updateRaceProgress();
+    if(Game.levelType!=='derby' && Game.state==='playing') updateRaceProgress(dt);
     if(Game.state==='playing') updateDrift(dt);
     // HUD text + minimap are glanceable -> refresh on coarse timers instead of every frame (cuts DOM + canvas work)
     hudAcc+=dt; if(hudAcc>=HUD_DT){ hudAcc=0; updateHUD(); }
     mapAcc+=dt; if(mapAcc>=MAP_DT){ mapAcc=0; drawMinimap(); }
     if(Game.state==='playing') checkLevelEnd();
     // engine/wind/tyre drones are smoothed in the audio thread (setTargetAtTime), so JS only needs to nudge them ~30x/s
-    if(Game.player){ audioAcc+=dt; if(audioAcc>=AUDIO_DT){ audioAcc=0;
+    if(Game.player && (Game.state==='playing'||Game.state==='countdown')){ audioAcc+=dt; if(audioAcc>=AUDIO_DT){ audioAcc=0;
       const p=Game.player; audio.engine(p.speed, p.engineCut?0:input.throttle, p.y>0.4 && !p.onRamp, p.enginePitch, p.engineLump); audio.wind(p.speed);
       const [rx,rz]=p.right(); const slip=Math.abs(p.vx*rx+p.vz*rz);
       audio.screech((p.alive&&p.y<0.3)?clamp((slip-3.5)/7,0,1)*clamp(p.speed/14,0,1):0); } }   // tyres howl when sliding hard at speed
   }
-  Perf.frame(dt);                 // adaptive quality: judge fps + set this frame's shadow refresh BEFORE rendering
+  Perf.frame(frameDt);            // measure actual frame time, not the capped simulation step
   renderer.render(scene,camera);
   // once the freshly-built level has been drawn a couple of frames, take down the "GENERATING LEVEL" screen
-  if(Game.reveal>0 && --Game.reveal===0){ showOverlay(null); hud(true); }
+  if(Game.reveal>0 && --Game.reveal===0){ showOverlay(Game.paused?'pauseScreen':null); hud(true); }
 }
 
 /* ====================================================================
@@ -3521,20 +3790,84 @@ function loop(){
 function readKeys(){ let t=0,s=0;
   if(keys['w']||keys['arrowup'])t+=1; if(keys['s']||keys['arrowdown'])t-=1;
   if(keys['a']||keys['arrowleft'])s+=1; if(keys['d']||keys['arrowright'])s-=1;
-  input.throttle=t; input.rawSteer=s; input.hand=!!keys[' ']; }   // rawSteer is smoothed into input.steer in the loop
-window.addEventListener('keydown',e=>{ const k=e.key.toLowerCase(); keys[k]=true;
-  if(['arrowup','arrowdown','arrowleft','arrowright',' '].includes(k)) e.preventDefault();
-  if(k==='m'){ const m=audio.toggleMute(); banner(m?'MUTED':'SOUND ON',''); }
-  if(k==='p' && Game.state==='playing') togglePause(); readKeys(); });
+  kbInput.throttle=t; kbInput.steer=s; kbInput.hand=!!keys[' '];
+  input.throttle=t; input.rawSteer=s; input.hand=kbInput.hand; }
+function pollGamepad(){
+  let pads=[]; try{ pads=navigator.getGamepads?navigator.getGamepads():[]; }catch(e){}
+  const p=Array.from(pads||[]).find(Boolean);
+  const throttle=clamp(kbInput.throttle+touchInput.throttle,-1,1), steering=clamp(kbInput.steer+touchInput.steer,-1,1);
+  if(!p){ input.throttle=throttle; input.rawSteer=steering; input.hand=kbInput.hand||touchInput.hand; gamepadStartHeld=false; return; }
+  const dead=(v,d=0.14)=>Math.abs(v)<d?0:(Math.abs(v)-d)/(1-d)*Math.sign(v);
+  const steer=dead(p.axes[0]||0), gas=p.buttons[7]?.value||0, brake=p.buttons[6]?.value||0;
+  input.rawSteer=steering||-steer; // gamepad right is negative in this steering model
+  input.throttle=throttle||clamp(gas-brake,-1,1);
+  input.hand=kbInput.hand||touchInput.hand||!!p.buttons[0]?.pressed;
+  const start=!!p.buttons[9]?.pressed;
+  if(start&&!gamepadStartHeld) togglePause();
+  gamepadStartHeld=start;
+}
+function rumble(strength,ms){
+  try{ const pads=navigator.getGamepads?navigator.getGamepads():[];
+    for(const p of pads||[]){ const a=p&&p.vibrationActuator; if(a&&a.playEffect) Promise.resolve(a.playEffect('dual-rumble',{duration:ms,strongMagnitude:strength,weakMagnitude:strength*0.55})).catch(()=>{}); }
+  }catch(e){} // unsupported haptics must never interrupt collision handling
+}
+function clearControls(){
+  for(const k in keys) keys[k]=false;
+  touchPointers.clear(); touchInput.throttle=touchInput.steer=0; touchInput.hand=false;
+  for(const b of document.querySelectorAll('[data-touch]')) b.classList.remove('pressed');
+  readKeys(); input.steer=0;
+}
+function readTouch(){
+  const held=new Set(touchPointers.values());
+  touchInput.throttle=Number(held.has('gas'))-Number(held.has('brake'));
+  touchInput.steer=Number(held.has('left'))-Number(held.has('right')); touchInput.hand=held.has('hand');
+  for(const b of document.querySelectorAll('[data-touch]')) b.classList.toggle('pressed',held.has(b.dataset.touch));
+}
+for(const b of document.querySelectorAll('[data-touch]')){
+  b.addEventListener('pointerdown',e=>{
+    if(Game.state!=='playing'||Game.paused) return;
+    e.preventDefault(); b.setPointerCapture(e.pointerId); touchPointers.set(e.pointerId,b.dataset.touch); readTouch();
+  });
+  for(const event of ['pointerup','pointercancel','lostpointercapture']) b.addEventListener(event,e=>{
+    touchPointers.delete(e.pointerId); readTouch();
+  });
+}
+$('touchPause').addEventListener('click',togglePause);
+window.addEventListener('keydown',e=>{ const k=e.key.toLowerCase();
+  if(e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
+  if(k==='m'&&!e.repeat){ const m=audio.toggleMute(); banner(m?'MUTED':'SOUND ON',''); }
+  if(Game.state!=='playing'&&Game.state!=='countdown') return;
+  if(['arrowup','arrowdown','arrowleft','arrowright',' ','escape'].includes(k)) e.preventDefault();
+  if((k==='p'||k==='escape')&&!e.repeat){ togglePause(); return; }
+  if(!Game.paused){ keys[k]=true; readKeys(); }
+});
 window.addEventListener('keyup',e=>{ keys[e.key.toLowerCase()]=false; readKeys(); });
 // on blur the render loop is throttled, so the engine oscillator would drone on its last value — suspend all audio
-window.addEventListener('blur',()=>{ for(const k in keys) keys[k]=false; readKeys(); audio.suspend(); });
+window.addEventListener('blur',()=>{ clearControls(); if(!Game.paused) togglePause(); audio.suspend(); });
 window.addEventListener('focus',()=>{ if(!Game.paused) audio.resume(); });
-function togglePause(){ Game.paused=!Game.paused; showOverlay(Game.paused?'pauseScreen':null); if(Game.paused) audio.suspend(); else audio.resume(); }
+function togglePause(){
+  if(Game.state!=='playing'&&Game.state!=='countdown') return;
+  Game.paused=!Game.paused; clearControls(); showOverlay(Game.paused?'pauseScreen':null);
+  if(Game.paused) audio.suspend(); else audio.resume();
+}
+
+async function requestLandscape(){
+  // Orientation lock normally requires fullscreen and a direct user gesture. Each operation is best-effort:
+  // Android commonly accepts both; iOS Safari generally falls back to the CSS rotation gate above.
+  try{
+    const root=document.documentElement;
+    if(!document.fullscreenElement){
+      const enter=root.requestFullscreen||root.webkitRequestFullscreen;
+      if(enter) await enter.call(root,{navigationUI:'hide'});
+    }
+  }catch(e){}
+  try{ if(screen.orientation&&screen.orientation.lock) await screen.orientation.lock('landscape'); }catch(e){}
+}
 
 // hide the overlay immediately for instant feedback, then build the (slow) level on the next frame
-function go(r){
+function go(r,fresh=false){
   if(Game.state==='loading') return;   // debounce: ignore a second click while a level is already being built
+  if(fresh){ Game.score=0; Game.lives=3; Game.championship={rounds:0,points:{}}; }
   // IMMEDIATELY cover the scene with the "GENERATING LEVEL" screen and cut the motor, THEN build on a later
   // frame. The level build is synchronous and can take a moment; deferring it past a paint means the loading
   // screen actually shows instead of the old scene appearing frozen with the car idling.
@@ -3575,7 +3908,20 @@ function buildVehicleChips(){
 let pvRenderer, pvScene, pvCam, pvCars=[];
 function previewHighlight(){
   for(const pc of pvCars){ const sel=pc.key===Game.playerVehicle;
-    pc.mesh.scale.setScalar(sel?0.8:0.54); pc.mesh.position.y=sel?0.05:-0.1; }   // selected car stands out (25% bigger)
+    pc.mesh.scale.setScalar(sel?0.8:0.54); pc.mesh.position.y=sel?0.05:-0.1;
+    if(sel) recolorMesh(pc.mesh,Game.playerColor); }   // selected car stands out and previews the saved paint
+}
+function recolorMesh(root,color){
+  const old=root.userData.baseColor&&root.userData.baseColor.getHex();
+  if(old!=null) root.traverse(o=>{ const mats=Array.isArray(o.material)?o.material:[o.material];
+    for(const m of mats) if(m&&m.color&&m.color.getHex()===old) m.color.setHex(color); });
+  root.userData.baseColor=new THREE.Color(color);
+}
+function buildPaintChips(){
+  const wrap=$('paintBtns'); if(!wrap)return; wrap.innerHTML='';
+  for(const color of PLAYER_PAINTS){ const b=document.createElement('button');
+    b.className='chip paintChip'+(Game.playerColor===color?' selected':''); b.style.background='#'+color.toString(16).padStart(6,'0');
+    b.title='Paint #'+color.toString(16).padStart(6,'0'); b.addEventListener('click',()=>{ Game.playerColor=color; saveCareer(); buildPaintChips(); previewHighlight(); }); wrap.appendChild(b); }
 }
 function setupVehiclePreview(){
   const cv=document.getElementById('vehPreview'); if(!cv || pvRenderer) return;
@@ -3612,7 +3958,7 @@ function buildDiffChips(){
 }
 function refreshCashTags(){ $('startCash').textContent='$'+Game.cash.toLocaleString(); if($('garageCash')) $('garageCash').textContent='$'+Game.cash.toLocaleString(); }
 function initSetupUI(){
-  buildVehicleChips(); buildDiffChips(); refreshCashTags(); setupVehiclePreview();
+  buildVehicleChips(); buildDiffChips(); buildPaintChips(); refreshCashTags(); setupVehiclePreview();
   const vs=$('volSlider'); vs.value=Math.round(Game.volume*100); $('volVal').textContent=vs.value;
   vs.addEventListener('input',()=>{ Game.volume=clamp(vs.value/100,0,1); $('volVal').textContent=vs.value; audio.setVolume(Game.volume); saveCareer(); });
   $('openGarageBtn').addEventListener('click',()=>openGarage('startScreen'));
@@ -3664,15 +4010,17 @@ function closeGarage(){
 $('garageCloseBtn').addEventListener('click',closeGarage);
 $('winGarageBtn').addEventListener('click',()=>openGarage('winScreen'));
 $('loseHomeBtn').addEventListener('click',()=>{
+  clearRoundTimeouts(); clearControls(); Game.state='menu'; Game.paused=false; audio.cutEngine();
   Game.progScale=1; Game.score=0; Game.lives=3; Game.round=1;  // full reset on giving up
   showOverlay('startScreen'); hud(false); refreshCashTags(); buildVehicleChips(); previewHighlight();
 });
 $('loseGarageBtn').addEventListener('click',()=>openGarage('loseScreen'));
-$('startBtn').addEventListener('click',()=>{ audio.init(); audio.setVolume(Game.volume); go(1); });
+$('startBtn').addEventListener('click',async()=>{ audio.init(); audio.setVolume(Game.volume); await requestLandscape(); if(Game.state==='menu') go(1,true); });
+$('landscapeRetryBtn').addEventListener('click',requestLandscape);
 $('nextBtn').addEventListener('click',()=>{ go(Game.round+1); });
 $('retryBtn').addEventListener('click',()=>{
-  if(Game.lives>0){ Game.lives--; go(Game.round); }   // continue from the SAME level (keeps score)
-  else go(1);                                          // out of lives -> full restart
+  if(Game.state==='loading'||Game.lives<=0) return;
+  Game.lives--; go(Game.round);   // spent lives stay spent, including retries of round one
 });
 $('resumeBtn').addEventListener('click',togglePause);
 

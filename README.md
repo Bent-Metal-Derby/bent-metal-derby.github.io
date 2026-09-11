@@ -2,7 +2,7 @@
 
 **Browser demolition derby and racing game — ram, wreck, drift, repeat.**
 
-Five vehicle classes. Three arena types. A persistent career with upgrades. Everything runs in a single HTML file with no server required.
+Five vehicle classes. Four arena types. A persistent career with upgrades. Everything runs in a single HTML file with no server required.
 
 MIT License — fork it, mod it, ship your own version.
 
@@ -20,11 +20,11 @@ Open `index.html` in any modern browser or visit https://bent-metal-derby.github
 | Brake / Reverse | S / ↓ |
 | Steer | A / D or ← → |
 | Handbrake | Space |
-| Nitro | Shift |
+| Nitro | Activates automatically when collected |
 | Camera reverse | Hold S / ↓ while reversing |
-| Pause | Escape |
+| Pause | P / Escape (controller Start) |
 
-On mobile, on-screen touch buttons appear automatically.
+On mobile, touch controls appear automatically: forward and brake/reverse on the left, steering and handbrake on the right. Multiple buttons can be held together. The pause button is at the top.
 
 ---
 
@@ -38,7 +38,11 @@ Each round drops you into a randomly chosen arena:
 
 **City Circuit** — A tight 90° street course with solid buildings, sidewalks you can cut across, and no margin for error in the corners. Three laps, same placement multiplier as the oval.
 
-All arenas can be day or night, and the track surface switches between asphalt and dirt at random.
+**Figure Eight** — An open circuit with a central crossing, grass or dirt runoff, and three laps. Watch for cars crossing your path.
+
+Open road edges are drivable. Continuous walls on the paved race circuit and derby pit contain cars; tire stacks, buildings, trees, and poles block movement where they stand. Dirt races use a rally loop with gaps between the tire stacks.
+
+All arenas can be day or night. Race and figure-eight rounds can use asphalt or dirt.
 
 ---
 
@@ -75,7 +79,7 @@ Progress carries over between sessions via `localStorage`.
 | Ram | Your hits deal more damage |
 | Grip | Cornering and traction |
 
-Upgrade cost rises per level: `$200 + (level × $250)`. A fully maxed stat costs `$200 + $250 + $500 + $750 + $1,000 = $2,700` across five levels.
+Upgrade cost rises per level: `$200 + (level × $250)`. A fully maxed stat costs `$200 + $450 + $700 + $950 + $1,200 = $3,500` across five levels.
 
 **Switching vehicles** — you can change your ride between rounds from the win/loss screen or by opening the Garage. Each vehicle keeps its own separate upgrade progress.
 
@@ -91,7 +95,7 @@ Upgrade cost rises per level: `$200 + (level × $250)`. A fully maxed stat costs
 | **Buggy** | Featherweight rocket | Blistering acceleration and cornering, made of glass |
 | **Muscle** | Speed demon | Highest top end, light on armour and grip, loose in the bends |
 
-Damage is physics-based and asymmetric — the faster car in a collision takes more of the impact. Rear hits do the most damage (×1.6), fronts the least (×0.65), sides in the middle (×1.25). Head-ons hurt both cars.
+Damage depends on incoming speed, ram strength, and where each car is hit. Rear hits do the most damage (×1.6), fronts the least (×0.65), sides in the middle (×1.25). Head-ons hurt both cars.
 
 Cars accumulate visible damage: panel deformation deepens as health drops below 75%, and a wrecked car crumples completely, stays on the field, and can still be rammed and rolled.
 
@@ -125,6 +129,8 @@ Harder difficulties also field more opponents as rounds progress.
 ---
 
 ## Modding
+
+Run the regression checks with `node --test tests/game.test.cjs` (Node.js 22 or newer; no npm install needed). They cover race results, collisions, controls, terrain, retries, settings, and generated courses. Rendering and audio use stubs in these tests.
 
 The entire game is one self-contained HTML file (~3,000 lines). No bundler, no dependencies beyond Three.js r128 loaded from CDN. Everything — physics constants, vehicle stats, arena generation, audio, UI — is in one place and clearly commented.
 
