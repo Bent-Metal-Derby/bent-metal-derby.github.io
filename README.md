@@ -30,7 +30,7 @@ On mobile, touch controls appear automatically: forward and brake/reverse on the
 
 ## Arenas
 
-Each round drops you into a randomly chosen arena:
+Choose an arena on the start screen, or select **Mixed tour** for a random arena each round. Your arena and race-format choices are saved between visits.
 
 **Derby** — A circular dirt pit surrounded by bleachers. Be the last car running. No laps, no finish line — pure carnage. Wrecking every rival banks the full point haul.
 
@@ -43,6 +43,10 @@ Each round drops you into a randomly chosen arena:
 Open road edges are drivable. Continuous walls on the paved race circuit and derby pit contain cars; tire stacks, buildings, trees, and poles block movement where they stand. Dirt races use a rally loop with gaps between the tire stacks.
 
 All arenas can be day or night. Race and figure-eight rounds can use asphalt or dirt.
+
+**Elimination races** — select Elimination as the race format. When the leader completes lap 1 and lap 2, the last-place car is eliminated. Survive those cuts, then race to the finish on lap 3. The position badge warns **AT RISK** when you are last. Derby rounds always use the usual last-car-running rules.
+
+**Lap timing** — the race clock starts at GO and stops when you finish; pausing stops the clock. Each completed lap shows its time and difference from your previous best. Results include your race time and best lap. Best laps are tracked within the current race because each newly generated course has a different layout.
 
 ---
 
@@ -130,7 +134,7 @@ Harder difficulties also field more opponents as rounds progress.
 
 ## Modding
 
-Run the regression checks with `node --test tests/game.test.cjs` (Node.js 22 or newer; no npm install needed). They cover race results, collisions, controls, terrain, retries, settings, and generated courses. Rendering and audio use stubs in these tests.
+Run the regression checks with `node --test tests/game.test.cjs` (Node.js 22 or newer; no npm install needed). They cover race results, lap timing, elimination rules, collisions, controls, terrain, retries, settings, and generated courses. Rendering and audio use stubs in these tests.
 
 The entire game is one self-contained HTML file (~3,000 lines). No bundler, no dependencies beyond Three.js r128 loaded from CDN. Everything — physics constants, vehicle stats, arena generation, audio, UI — is in one place and clearly commented.
 

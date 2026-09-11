@@ -39,7 +39,7 @@ function runtime() {
     function setup(type='race',dirt=true){
       Object.assign(Game,{state:'playing',levelType:type,dirtTrack:dirt,trackWalls:type==='race'&&!dirt,
         cars:[],ramps:[],barrels:[],tires:[],trees:[],cityBuildings:[],powerups:[],towTruck:null,
-        player:null,pullout:{},finishSeq:0,elapsed:10,gripMult:1,wrongTimer:0});
+        player:null,pullout:{},finishSeq:0,elapsed:10,gripMult:1,wrongTimer:0,raceTime:0,paused:false,eventType:'standard',eliminationLap:0});
       Course.setPoly([[-60,-60],[60,-60],[60,60],[-60,60]],15,type==='city'?4:0);
     }
     function car(x=0,z=0){
@@ -51,7 +51,7 @@ function runtime() {
         reversePow:CAR.reversePow,turnRate:CAR.turnRate,gripF:CAR.grip,gripH:CAR.gripHand,
         drag:CAR.drag,ram:1,pullSide:0,nitroT:0,shieldT:0,dmgT:0,steerVis:0,squash:0,
         dustTimer:999,hitFlash:0,lastScoredHit:-1,removed:false,finished:false,finishOrder:0,
-        cumU:0,prevU:0,prevUWarn:0,laps:0,burning:false,
+        cumU:0,prevU:0,prevUWarn:0,laps:0,burning:false,lapTimes:[],lapStartedAt:0,finishTime:null,eliminated:false,
         mesh:{visible:true,userData:{body:{material:{color}},cabin:{material:{color}}}},
         applyDamageVisual(){},syncMesh(){},
       }); Game.cars.push(c);return c;
@@ -257,4 +257,77 @@ check('garage settings survive a save/load round trip',`
   Game.cash=1200;Game.playerVehicle='buggy';Game.playerColor=PLAYER_PAINTS[2];Game.volume=.3;Game.upgrades.buggy.engine=4;saveCareer();
   Game.cash=0;Game.playerVehicle='car';Game.playerColor=PLAYER_PAINTS[0];Game.volume=1;Game.upgrades.buggy.engine=0;loadCareer();
   assert.equal(Game.cash,1200);assert.equal(Game.playerVehicle,'buggy');assert.equal(Game.playerColor,PLAYER_PAINTS[2]);assert.equal(Game.volume,.3);assert.equal(Game.upgrades.buggy.engine,4);
+`);
+check('arena selection controls the surface and derby never uses race elimination',`
+  clearRoundScene=spawnPowerups=applyEnvironment=()=>{};
+  buildDerby=buildRaceTrack=buildCityTrack=buildDirtTrack=()=>{};
+  Car=class {constructor(){this.ai={aggro:1};} reset(){}};
+  Game.raceFormat='elimination';
+  for(const arena of ARENA_CHOICES.slice(1)){
+    Game.arenaChoice=arena.key;Game.raceTime=99;startRound(2);
+    assert.equal(Game.levelType,arena.type);assert.equal(Game.dirtTrack,arena.dirt);
+    assert.equal(Game.eventType,arena.type==='derby'?'standard':'elimination');assert.equal(Game.raceTime,0);
+  }
+`);
+check('arena and format choices persist and reject invalid saved values',`
+  let saved;localStorage.setItem=(k,s)=>saved=s;localStorage.getItem=()=>saved;
+  Game.arenaChoice='rally';Game.raceFormat='elimination';saveCareer();
+  Game.arenaChoice='tour';Game.raceFormat='standard';loadCareer();
+  assert.equal(Game.arenaChoice,'rally');assert.equal(Game.raceFormat,'elimination');
+  saved=JSON.stringify({arenaChoice:'unknown',raceFormat:'unknown'});loadCareer();
+  assert.equal(Game.arenaChoice,'rally');assert.equal(Game.raceFormat,'elimination');
+  Game.arenaChoice='derby';refreshEventUI();assert.equal($('formatSelect').disabled,true);assert.equal($('formatSelect').value,'standard');
+  Game.arenaChoice='city';refreshEventUI();assert.equal($('formatSelect').disabled,false);assert.equal($('formatSelect').value,'elimination');
+`);
+check('race clock excludes countdowns, pauses and results',`
+  setup();Game.player=car();Game.state='countdown';updateRaceProgress(1);assert.equal(Game.raceTime,0);
+  Game.state='playing';Game.paused=true;updateRaceProgress(1);assert.equal(Game.raceTime,0);
+  Game.paused=false;updateRaceProgress(.5);assert.equal(Game.raceTime,.5);
+  Game.state='roundwon';updateRaceProgress(1);assert.equal(Game.raceTime,.5);
+`);
+check('lap times interpolate line crossings and ignore reverse recrossings',`
+  setup();const p=car();Game.player=p;Game.raceTime=59;p.cumU=.99;p.prevU=.99;place(p,.01);
+  updateRaceProgress(.02);assert.equal(p.lapTimes.length,1);assert.ok(Math.abs(p.lapTimes[0]-59.01)<1e-8);
+  place(p,.99);updateRaceProgress(.02);place(p,.01);updateRaceProgress(.02);
+  assert.equal(p.lapTimes.length,1);assert.ok(Math.abs(p.lapStartedAt-59.01)<1e-8);
+  Game.raceTime=117;p.cumU=1.99;p.prevU=.99;place(p,.01);updateRaceProgress(.02);
+  assert.equal(p.lapTimes.length,2);assert.ok(Math.abs(bestLapTime(p)-58)<1e-8);
+  assert.equal($('bannerBig').textContent,'FINAL LAP');assert.ok($('bannerSub').textContent.includes('NEW BEST'));
+`);
+check('race finish timing freezes at the line and reaches the result board',`
+  setup();const p=car(),r=car();Game.player=p;p.name='YOU';r.name='RIVAL';r.prevU=.2;place(r,.2);
+  p.cumU=2.99;p.prevU=.99;p.lapTimes=[60,59];p.lapStartedAt=119;Game.raceTime=178;place(p,.01);
+  updateRaceProgress(.02);assert.ok(Math.abs(p.finishTime-178.01)<1e-8);assert.equal(p.lapTimes.length,3);
+  const finish=p.finishTime;updateRaceProgress(.5);updateHUD();assert.equal(p.finishTime,finish);assert.equal($('raceTime').textContent,'2:58.010');
+  completeLevel(1,1,true,'1ST PLACE!',WIN_BONUS,false);buildWinVehChips=()=>{};showWin();
+  assert.equal(Game.lastBreakdown.timing.time,finish);assert.ok($('winBoard').innerHTML.includes('2:58.010'));
+  assert.ok($('winBoard').innerHTML.includes('0:59.000'));
+`);
+check('elimination removes exactly the last car at each of the first two leader laps',`
+  setup();Game.eventType='elimination';const p=car(),a=car(),b=car(),c=car();Game.player=p;
+  p.isPlayer=true;p.name='YOU';a.name='A';b.name='B';c.name='C';
+  const line=(x,u)=>{x.cumU=u;x.prevU=u%1;place(x,u);};
+  line(p,.8);line(a,.6);line(b,.4);line(c,.2);c.lastHitBy=p;
+  updateRaceProgress();assert.equal(aliveCars().length,4);
+  line(p,.99);place(p,.01);updateRaceProgress();assert.equal(c.eliminated,true);assert.equal(c.alive,false);
+  assert.equal(c.burning,false);assert.equal(Game.levelWrecks,0);assert.equal(c.killedByPlayer,false);
+  updateRaceProgress();assert.equal(aliveCars().length,3);
+  line(p,1.99);place(p,.01);updateRaceProgress();assert.equal(b.eliminated,true);assert.equal(aliveCars().length,2);
+  line(p,2.99);place(p,.01);updateRaceProgress();assert.equal(a.alive,true);assert.equal(Game.eliminationLap,2);
+`);
+check('player elimination warns beforehand and displays the correct loss reason',`
+  setup();Game.eventType='elimination';const p=car(),r=car();Game.player=p;p.isPlayer=true;p.name='YOU';r.name='RIVAL';
+  p.prevU=.2;p.cumU=.2;place(p,.2);r.prevU=.99;r.cumU=.99;place(r,.99);updateHUD();
+  assert.equal($('placeSub').textContent,'AT RISK');place(r,.01);updateRaceProgress();checkLevelEnd();
+  assert.equal(Game.state,'gameover');assert.equal($('bannerBig').textContent,'ELIMINATED');
+  buildLoseVehChips=()=>{};showLose();assert.equal($('loseTitle').textContent,'ELIMINATED');
+`);
+check('car resets clear lap history, finish times and elimination state',`
+  setup();const p=car();p.lapTimes=[55];p.lapStartedAt=55;p.finishTime=150;p.eliminated=true;
+  const start=Course.at(.99);p.reset(start.cx,start.cz,0);
+  assert.equal(p.lapTimes.length,0);assert.equal(p.lapStartedAt,0);assert.equal(p.finishTime,null);assert.equal(p.eliminated,false);
+`);
+check('race time formatting carries milliseconds across minute boundaries',`
+  assert.equal(formatRaceTime(null),'—');assert.equal(formatRaceTime(0),'0:00.000');
+  assert.equal(formatRaceTime(59.9996),'1:00.000');assert.equal(formatRaceTime(125.123),'2:05.123');
 `);
