@@ -39,7 +39,8 @@ function runtime() {
     function setup(type='race',dirt=true){
       Object.assign(Game,{state:'playing',levelType:type,dirtTrack:dirt,trackWalls:type==='race'&&!dirt,
         cars:[],ramps:[],barrels:[],tires:[],trees:[],cityBuildings:[],powerups:[],towTruck:null,
-        player:null,pullout:{},finishSeq:0,elapsed:10,gripMult:1,wrongTimer:0,raceTime:0,paused:false,eventType:'standard',eliminationLap:0});
+        player:null,pullout:{},finishSeq:0,elapsed:10,gripMult:1,wrongTimer:0,raceTime:0,paused:false,eventType:'standard',eliminationLap:0,
+        trial:null,recoveryHold:0,recoveryCooldown:0});
       Course.setPoly([[-60,-60],[60,-60],[60,60],[-60,60]],15,type==='city'?4:0);
     }
     function car(x=0,z=0){
@@ -52,6 +53,7 @@ function runtime() {
         drag:CAR.drag,ram:1,pullSide:0,nitroT:0,shieldT:0,dmgT:0,steerVis:0,squash:0,
         dustTimer:999,hitFlash:0,lastScoredHit:-1,removed:false,finished:false,finishOrder:0,
         cumU:0,prevU:0,prevUWarn:0,laps:0,burning:false,lapTimes:[],lapStartedAt:0,finishTime:null,eliminated:false,
+        recoveryLock:0,stuckT:0,recoverT:0,recoverCd:0,topSpeedEst:36,ai:{aggro:1},
         mesh:{visible:true,userData:{body:{material:{color}},cabin:{material:{color}}}},
         applyDamageVisual(){},syncMesh(){},
       }); Game.cars.push(c);return c;
@@ -276,8 +278,8 @@ check('arena and format choices persist and reject invalid saved values',`
   assert.equal(Game.arenaChoice,'rally');assert.equal(Game.raceFormat,'elimination');
   saved=JSON.stringify({arenaChoice:'unknown',raceFormat:'unknown'});loadCareer();
   assert.equal(Game.arenaChoice,'rally');assert.equal(Game.raceFormat,'elimination');
-  Game.arenaChoice='derby';refreshEventUI();assert.equal($('formatSelect').disabled,true);assert.equal($('formatSelect').value,'standard');
-  Game.arenaChoice='city';refreshEventUI();assert.equal($('formatSelect').disabled,false);assert.equal($('formatSelect').value,'elimination');
+  Game.arenaChoice='derby';refreshEventUI();assert.equal($('formatSelect').value,'standard');
+  Game.arenaChoice='city';refreshEventUI();assert.equal($('formatSelect').value,'elimination');
 `);
 check('race clock excludes countdowns, pauses and results',`
   setup();Game.player=car();Game.state='countdown';updateRaceProgress(1);assert.equal(Game.raceTime,0);
@@ -330,4 +332,106 @@ check('car resets clear lap history, finish times and elimination state',`
 check('race time formatting carries milliseconds across minute boundaries',`
   assert.equal(formatRaceTime(null),'—');assert.equal(formatRaceTime(0),'0:00.000');
   assert.equal(formatRaceTime(59.9996),'1:00.000');assert.equal(formatRaceTime(125.123),'2:05.123');
+`);
+check('AI chooses room to pass a stopped car without weaving every frame',`
+  setup();const c=car(),o=car();place(c,.05);c.prevU=.05;c.angle=Math.PI/2;c.vx=20;
+  place(o,.09);o.alive=false;
+  driveRaceAI(c,.1);const lane=c.ai.targetLane;assert.ok(Math.abs(lane)>3);
+  for(let i=0;i<8;i++)driveRaceAI(c,.1);assert.equal(c.ai.targetLane,lane);
+`);
+check('AI brakes before a pileup when every lane is blocked',`
+  setup();const c=car();place(c,.05);c.prevU=.05;c.angle=Math.PI/2;c.vx=25;
+  for(const lane of [-10,-5,0,5,10]){const o=car();place(o,.067);o.z+=lane;}
+  assert.ok(driveRaceAI(c,.1).throttle<0);
+`);
+check('AI slows for sharp corners and keeps a bounded lane on narrow roads',`
+  setup();const c=car();place(c,.235);c.prevU=.235;c.angle=Math.PI/2;c.vx=35;
+  const ctrl=driveRaceAI(c,.1);assert.ok(ctrl.throttle<0);assert.ok(Math.abs(ctrl.steer)<=1);
+  Course.halfW=7;driveRaceAI(c,2);assert.ok(Math.abs(c.ai.targetLane)<=2.5);
+`);
+check('AI ignores removed wrecks but detects a crossing car moving into its lane',`
+  setup();const c=car(),o=car();place(c,.05);c.prevU=.05;c.angle=Math.PI/2;
+  place(o,.08);o.removed=true;assert.equal(raceTraffic(c,Course.project(c.x,c.z),30).length,0);
+  o.removed=false;o.z-=7;o.vz=20;
+  const seen=raceTraffic(c,Course.project(c.x,c.z),30);assert.equal(seen.length,1);assert.ok(Math.abs(seen[0].side)<.001);
+`);
+check('recovery returns to a clear road location without healing or gaining progress',`
+  setup();const p=car();Game.player=p;p.health=25;p.cumU=1.35;p.prevU=.35;p.lapTimes=[50];p.lapStartedAt=50;p.laps=1;p.x=300;p.z=300;
+  const before=p.cumU;assert.equal(recoverPlayer(),true);
+  assert.equal(p.health,25);assert.ok(p.cumU<before);assert.equal(p.lapTimes.length,1);assert.equal(p.lapStartedAt,50);
+  assert.ok(Math.abs(Course.project(p.x,p.z).lateral)<Course.halfW);assert.equal(p.recoveryLock,2);
+  tick(120,{throttle:1,steer:0,hand:false});assert.equal(p.speed,0);assert.ok(p.recoveryLock>.9);
+`);
+check('recovery waits for the hold and pause cancels it',`
+  setup();Game.player=car();input.recover=true;updateRecovery(1);assert.equal(Game.recoveryHold,1);assert.equal(Game.recoveryCooldown,0);
+  Game.paused=true;updateRecovery(1);assert.equal(Game.recoveryHold,0);
+  Game.paused=false;input.recover=true;updateRecovery(1.5);assert.equal(Game.recoveryCooldown,10);
+`);
+check('recovery cannot resurrect wrecks or be used at speed, after finishing or on cooldown',`
+  setup();const p=car();Game.player=p;p.alive=false;assert.equal(recoverPlayer(),false);
+  p.alive=true;p.vx=20;assert.equal(recoverPlayer(),false);p.vx=0;p.finished=true;assert.equal(recoverPlayer(),false);
+  p.finished=false;Game.recoveryCooldown=2;assert.equal(recoverPlayer(),false);
+`);
+check('recovery skips obstacles and approaching traffic',`
+  setup();const p=car();Game.player=p;p.cumU=.3;
+  const a=Course.at(.297);Game.barrels=[{x:a.cx,z:a.cz,r:1}];
+  const spot=findRecoverySpot(p);assert.ok(spot);assert.ok(Math.hypot(spot.x-a.cx,spot.z-a.cz)>=4);
+  const other=car(spot.x+12,spot.z);other.vx=-20;assert.equal(recoverySpotClear(spot.x,spot.z,p),false);
+`);
+check('a blocked recovery does not teleport, heal or charge the cooldown',`
+  setup();const p=car();Game.player=p;p.cumU=.5;p.health=45;
+  recoverySpotClear=()=>false;assert.equal(recoverPlayer(),false);assert.equal(Game.recoveryCooldown,0);assert.equal(p.health,45);assert.equal(p.cumU,.5);
+`);
+check('derby recovery stays inside the visible arena wall',`
+  setup('derby',false);const p=car(200,200);Game.player=p;assert.equal(recoverPlayer(),true);assert.ok(Math.hypot(p.x,p.z)<WALL_R-8);
+`);
+check('seeded track generation repeats and restores the normal random source after errors',`
+  const generate=()=>{genTrack();Course.setPolar();return JSON.stringify(TRK.harms);};
+  assert.equal(withLayoutSeed(1729,generate),withLayoutSeed(1729,generate));assert.notEqual(withLayoutSeed(1730,generate),withLayoutSeed(1729,generate));
+  assert.throws(()=>withLayoutSeed(12,()=>{throw Error('test');}));assert.equal(layoutRandom,null);
+  assert.equal(withLayoutSeed(12,()=>{visualRand(0,1);return random();}),withLayoutSeed(12,()=>random()));
+`);
+check('ghost playback interpolates heading across zero and snaps recoveries',`
+  const samples=[[0,0,0,0,3.1,0],[1,10,2,20,-3.1,0],[2,50,0,60,0,1]];
+  const pose=ghostPose(samples,.5);assert.equal(pose[0],5);assert.equal(pose[1],1);assert.ok(Math.abs(pose[3]-Math.PI)<.01);
+  assert.equal(ghostPose(samples,1.5)[0],10);assert.equal(ghostPose(samples,2)[0],50);
+`);
+check('ghost storage rejects malformed, non-monotonic and incomplete recordings',`
+  let data;localStorage.getItem=()=>JSON.stringify(data);
+  data={time:1,samples:[[0,0,0,0,0,0],[1,5,0,0,0,0]]};assert.ok(loadGhost('x'));
+  data.samples[1][0]=0;assert.equal(loadGhost('x'),null);
+  data.samples[1][0]=.5;assert.equal(loadGhost('x'),null);
+  data.samples[1][0]=1;data.samples[1][2]=null;assert.equal(loadGhost('x'),null);
+`);
+check('ghost records are separate for arena, vehicle and upgrade configuration',`
+  Game.arenaChoice='rally';const a=trialKey();Game.arenaChoice='city';assert.notEqual(trialKey(),a);
+  Game.arenaChoice='rally';Game.upgrades.car.engine++;assert.notEqual(trialKey(),a);
+  Game.upgrades.car.engine=0;Game.playerVehicle='truck';assert.notEqual(trialKey(),a);
+`);
+check('solo time trials require all laps and do not award career cash, lives or points',`
+  setup();const p=car();Game.player=p;Game.eventType='trial';Game.arenaChoice='circuit';Game.cash=123;Game.lives=2;Game.score=42;
+  initTimeTrial();checkLevelEnd();assert.equal(Game.state,'playing');
+  Game.raceTime=10;p.finished=true;p.finishTime=10;p.lapTimes=[3,3,4];
+  let saved;localStorage.setItem=(k,s)=>saved=s;checkLevelEnd();
+  assert.equal(Game.state,'roundwon');assert.equal(Game.cash,123);assert.equal(Game.lives,2);assert.equal(Game.score,42);assert.equal(Game.championship.rounds,0);
+  const ghost=JSON.parse(saved);assert.equal(ghost.time,10);assert.equal(ghost.samples[0][0],0);assert.equal(ghost.samples.at(-1)[0],10);
+`);
+check('slower attempts keep the faster ghost and storage failure still finishes the trial',`
+  setup();Game.player=car();Game.eventType='trial';initTimeTrial();Game.trial.best={time:8,samples:[]};
+  Game.player.finished=true;Game.player.finishTime=10;Game.raceTime=10;let saves=0;localStorage.setItem=()=>saves++;
+  completeTimeTrial();assert.equal(saves,0);assert.equal(Game.lastBreakdown.newBest,false);
+  Game.trial.best=null;localStorage.setItem=()=>{throw Error('full');};completeTimeTrial();assert.equal(Game.lastBreakdown.saved,false);assert.equal(Game.state,'roundwon');
+`);
+check('time-trial retries never spend lives',`
+  Game.eventType='trial';Game.state='gameover';Game.lives=0;let round;go=r=>round=r;
+  $('retryBtn').listeners.click();assert.equal(round,Game.round);assert.equal(Game.lives,0);
+`);
+check('pausing stops recovery, ghost recording and replay advancement',`
+  setup();Game.player=car();Game.eventType='trial';initTimeTrial();Game.paused=true;
+  input.recover=true;updateRecovery(1);updateRaceProgress(1);assert.equal(Game.recoveryHold,0);assert.equal(Game.trial.samples.length,1);assert.equal(Game.raceTime,0);
+`);
+check('a millisecond tie keeps the existing ghost rather than replacing it',`
+  setup();Game.player=car();Game.eventType='trial';initTimeTrial();Game.trial.best={time:10,samples:[]};
+  Game.player.finished=true;Game.player.finishTime=9.999999999;Game.raceTime=10;
+  let saves=0;localStorage.setItem=()=>saves++;completeTimeTrial();assert.equal(saves,0);assert.equal(Game.lastBreakdown.newBest,false);
 `);

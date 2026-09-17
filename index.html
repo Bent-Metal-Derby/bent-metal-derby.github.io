@@ -63,7 +63,7 @@
   #hitsRow.flash b{ color:#fff !important; transform:scale(1.35); }
   #hitsRow b{ display:inline-block; transition:transform .12s, color .12s; }
 
-  #placeBadge{ bottom:22px; left:calc(50% - 130px); transform:translateX(-100%); text-align:center; padding:6px 18px; }
+  #placeBadge{ top:88px; left:18px; text-align:center; padding:6px 18px; }
   #placeOrd{ font-size:30px; font-weight:900; color:var(--gold); line-height:1; font-variant-numeric:tabular-nums; }
   #placeSub{ font-size:10px; letter-spacing:3px; opacity:.65; margin-top:2px; }
   #raceClock{ top:18px; left:50%; transform:translateX(-50%); width:156px; text-align:center; font-variant-numeric:tabular-nums; }
@@ -86,12 +86,14 @@
     background:rgba(10,14,20,.5); border:1px solid rgba(255,255,255,.15); border-radius:14px; }
 
   /* dark text in the day (against the bright ground), light text at night */
-  #controlsHint{ position:absolute; bottom:18px; left:18px; font-size:12px; line-height:1.7; opacity:.85;
-    color:#10141a; text-shadow:0 1px 2px rgba(255,255,255,.45); }
-  #controlsHint kbd{ background:rgba(0,0,0,.12); border:1px solid rgba(0,0,0,.35); color:#10141a;
+  #controlsHint{ position:absolute; bottom:18px; left:18px; font-size:13px; line-height:1.8; opacity:1;
+    padding:10px 14px; border:1px solid #68778b; border-radius:10px; background:rgba(8,12,18,.94); color:#fff; text-shadow:none; }
+  #controlsHint kbd{ background:#303c4c; border:1px solid #91a2b9; color:#fff;
     border-radius:5px; padding:1px 7px; font-family:inherit; font-size:11px; }
-  #controlsHint.night{ color:#eef3fa; text-shadow:0 1px 3px rgba(0,0,0,.7); }
-  #controlsHint.night kbd{ background:rgba(255,255,255,.14); border:1px solid rgba(255,255,255,.3); color:#eef3fa; }
+  #controlsHint.night{ color:#fff; text-shadow:none; }
+  #recoverBtn{position:absolute;left:18px;top:155px;pointer-events:auto;touch-action:none;padding:9px 12px;
+    min-height:40px;border:1px solid #9baec5;border-radius:10px;background:rgba(8,12,18,.92);color:#fff;font:bold 12px system-ui;cursor:pointer;}
+  #recoverBtn:disabled{opacity:.55;cursor:default}#recoverBtn.pressed{border-color:var(--accent);background:#73330c}
 
   #banner{ position:absolute; top:32%; left:50%; transform:translate(-50%,-50%);
     text-align:center; opacity:0; transition:opacity .25s; text-shadow:0 6px 24px rgba(0,0,0,.7); }
@@ -255,8 +257,10 @@
     .upg{padding:6px 9px;gap:7px}.upg .nm{font-size:11px}.upg .ds{font-size:9px}.pips{margin-top:2px}.pip{width:14px;height:4px}.buyBtn{padding:6px 9px;font-size:10px;min-width:68px}
     .spinner{margin-top:12px;width:32px;height:32px}.credit{display:none}
     #banner{top:52%;width:calc(100% - 200px)}
-    #banner .big{font-size:clamp(24px,5vw,40px);line-height:1.05}
-    #banner .sub{font-size:clamp(10px,1.5vw,13px);letter-spacing:1px;margin-top:5px}
+    #banner .big{font-size:clamp(20px,3.6vw,28px);line-height:1.05}
+    #banner .sub{font-size:11px;letter-spacing:.4px;margin-top:4px}
+    #fatality{font-size:28px;letter-spacing:2px}
+    #driftHud{top:calc(50% + 34px);letter-spacing:1px}#driftHud #driftLabel{font-size:12px}#driftHud #driftScore{font-size:18px}#driftHud #driftMult{font-size:14px}
   }
 
   /* chunky arcade-cabinet font for the big HUD readouts + titles */
@@ -269,6 +273,7 @@
     #stats .row{ font-size:12px; } #stats #roundLabel{ font-size:14px; }
     #touchPause{ left:50%; right:auto; transform:translateX(-50%); }
     #raceClock{ top:70px; width:140px; padding:5px 8px; } #raceTime{font-size:18px} #bestLap{font-size:10px}
+    #recoverBtn{top:auto;bottom:90px;font-size:10px;max-width:135px;min-height:36px;padding:7px 9px}
     #wrongway{ top:auto; bottom:90px; font-size:18px; letter-spacing:1px; white-space:nowrap; }
     #minimap{ bottom:90px; right:18px; width:100px; height:100px; }
     #placeBadge{ top:88px; bottom:auto; left:18px; transform:none; padding:5px 10px; }
@@ -300,8 +305,8 @@
   </div>
   <div id="stats" class="panel">
     <div id="roundLabel">ROUND 1</div>
-    <div class="row"><span>Lives</span><b id="livesVal" style="color:#ff5a6a">♥♥♥</b></div>
-    <div class="row"><span>Score</span><b id="score">0</b></div>
+    <div class="row" id="livesRow"><span>Lives</span><b id="livesVal" style="color:#ff5a6a">♥♥♥</b></div>
+    <div class="row" id="scoreRow"><span>Score</span><b id="score">0</b></div>
     <div class="row" id="hitsRow"><span>Hits</span><b id="hits">0</b></div>
     <div class="row"><span id="modeKey">Cars left</span><b id="modeVal">5</b></div>
     <div class="row" id="posRow" style="display:none"><span>Position</span><b id="posVal">—</b></div>
@@ -321,8 +326,10 @@
   <canvas id="minimap" width="170" height="170"></canvas>
   <div id="controlsHint">
     <kbd>W</kbd>/<kbd>↑</kbd> gas &nbsp; <kbd>S</kbd>/<kbd>↓</kbd> reverse &nbsp; <kbd>A</kbd><kbd>D</kbd> steer<br>
-    <kbd>Space</kbd> handbrake &nbsp; <kbd>M</kbd> mute &nbsp; <kbd>P</kbd> pause
+    <kbd>Space</kbd> handbrake &nbsp; <kbd>M</kbd> mute &nbsp; <kbd>P</kbd> pause<br>
+    Hold <kbd>R</kbd> to recover · 2-second restart penalty
   </div>
+  <button id="recoverBtn" data-touch="recover" aria-label="Hold to recover car">HOLD R · RECOVER</button>
   <div id="banner"><div class="big" id="bannerBig">READY</div><div class="sub" id="bannerSub"></div></div>
   <div id="wrongway">◄ WRONG WAY ►</div>
   <div id="fatality">FATALITY</div>
@@ -388,7 +395,7 @@
     <div class="eventRow">
       <label><span class="setupLabel">ARENA</span><select id="arenaSelect" class="eventSelect" aria-describedby="eventHint"></select></label>
       <label><span class="setupLabel">RACE FORMAT</span><select id="formatSelect" class="eventSelect" aria-describedby="eventHint">
-        <option value="standard">Standard</option><option value="elimination">Elimination</option>
+        <option value="standard">Standard</option><option value="elimination">Elimination</option><option value="trial">Time trial</option>
       </select></label>
       <div id="eventHint"></div>
     </div>
@@ -426,6 +433,7 @@
     <div id="winVehBtns" class="chips" style="justify-content:center"></div>
   </div>
   <div class="winBtns">
+    <button class="btn ghost hidden" id="trialHomeBtn">HOME</button>
     <button class="btn ghost" id="winGarageBtn">GARAGE</button>
     <button class="btn" id="nextBtn">NEXT ROUND →</button>
   </div>
@@ -458,6 +466,7 @@
 <div id="pauseScreen" class="overlay hidden">
   <div class="title">PAUSED</div>
   <button class="btn" id="resumeBtn">RESUME</button>
+  <button class="miniBtn" id="pauseHomeBtn" style="margin-top:14px">HOME</button>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -473,7 +482,16 @@
 const TAU = Math.PI*2;
 const clamp = (v,a,b)=> v<a?a : v>b?b : v;
 const lerp  = (a,b,t)=> a+(b-a)*t;
-const rand  = (a,b)=> a+Math.random()*(b-a);
+let layoutRandom=null;
+const random=()=>layoutRandom?layoutRandom():Math.random();
+const rand=(a,b)=>a+random()*(b-a);
+const visualRand=(a,b)=>a+Math.random()*(b-a);
+function withLayoutSeed(seed,fn){
+  const previous=layoutRandom;let s=seed>>>0;
+  layoutRandom=()=>{s=(Math.imul(s,1664525)+1013904223)>>>0;return s/4294967296;};
+  try{return fn();}finally{layoutRandom=previous;}
+}
+function angleDelta(a,b){let d=a-b;while(d>Math.PI)d-=TAU;while(d<-Math.PI)d+=TAU;return d;}
 function crossY(rx,rz,px,pz){ return rx*pz - rz*px; }
 
 /* ----------------------- tunables ----------------------------------- */
@@ -524,8 +542,8 @@ function circumR(a,b,c){ const ax=a[0],ay=a[1];
   const px=(D*E-B*F)/G, py=(A*F-C*E)/G; return Math.hypot(ax-px,ay-py); }
 function genTrack(){
   for(let attempt=0; attempt<60; attempt++){
-    const harms=[], n=3+Math.floor(Math.random()*3); let total=0;
-    for(let i=0;i<n;i++){ const amp=rand(0.05,0.13); total+=amp; harms.push({k:2+Math.floor(Math.random()*3), amp, phase:rand(0,TAU)}); }
+    const harms=[], n=3+Math.floor(random()*3); let total=0;
+    for(let i=0;i<n;i++){ const amp=rand(0.05,0.13); total+=amp; harms.push({k:2+Math.floor(random()*3), amp, phase:rand(0,TAU)}); }
     if(total>0.30){ const s=0.30/total; for(const h of harms) h.amp*=s; }
     TRK.R0=rand(70,82); TRK.harms=harms;
     const N=240, pts=[]; for(let i=0;i<N;i++){ const u=i/N*TAU, r=trkR(u); pts.push([r*Math.cos(u),r*Math.sin(u)]); }
@@ -578,7 +596,7 @@ function genCity(){
   const HW=11, SW=2.2;
   // ---- pick an axis-aligned outline with a notch (the notch is what creates the reverse turn) ----
   let corners;
-  if(Math.random()<0.34){
+  if(random()<0.34){
     // S / Z block: notches cut from two OPPOSITE corners -> two concave turns (far apart, never interfere)
     const W=rand(160,190), H=rand(148,178), x0=-W/2,x1=W/2,z0=-H/2,z1=H/2;
     const nw=rand(50,64), nh=rand(48,58), mw=rand(50,64), mh=rand(48,58);
@@ -592,7 +610,7 @@ function genCity(){
     corners=[ [x0,z0],[x1,z0],[x1,z1-nh],[x1-nw,z1-nh],[x1-nw,z1],[x0,z1] ];   // concave at idx 3
   }
   // random whole-loop orientation: 0/90/180/270 rotation + optional mirror, so the jog can land anywhere
-  const rot=Math.floor(Math.random()*4), mir=Math.random()<0.5?-1:1;
+  const rot=Math.floor(random()*4), mir=random()<0.5?-1:1;
   corners=corners.map(([x,z])=>{ x*=mir; for(let r=0;r<rot;r++){ const nx=-z; z=x; x=nx; } return [x,z]; });
 
   // ---- round most corners into quarter sweeps; leave 1-2 sharp. Radius is clamped so a fillet never
@@ -600,8 +618,8 @@ function genCity(){
   //      road+sidewalk half-width, which would invert the inner offset ring) just stay sharp 90s ----
   const n=corners.length;
   const seg=corners.map((c,i)=>{ const d=corners[(i+1)%n]; return Math.hypot(d[0]-c[0],d[1]-c[1]); });
-  const nSharp=1+(Math.random()<0.5?1:0); const sharp=new Set();
-  while(sharp.size<nSharp) sharp.add(Math.floor(Math.random()*n));
+  const nSharp=1+(random()<0.5?1:0); const sharp=new Set();
+  while(sharp.size<nSharp) sharp.add(Math.floor(random()*n));
   const pts=[];
   for(let i=0;i<n;i++){
     const cur=corners[i], prev=corners[(i+n-1)%n], next=corners[(i+1)%n];
@@ -859,8 +877,8 @@ function makeDirtTexture(){
       ctx.beginPath(); ctx.arc(x,y,r,0,7); ctx.fill(); }
     ctx.lineWidth=3;
     for(let i=0;i<60;i++){ ctx.strokeStyle=`rgba(28,22,16,${Math.random()*0.4+0.1})`; ctx.beginPath();
-      const cx=512+rand(-260,260),cy=512+rand(-260,260),rr=rand(20,160),a0=rand(0,6.28);
-      ctx.arc(cx,cy,rr,a0,a0+rand(0.5,2.4)); ctx.stroke(); }
+      const cx=512+visualRand(-260,260),cy=512+visualRand(-260,260),rr=visualRand(20,160),a0=visualRand(0,6.28);
+      ctx.arc(cx,cy,rr,a0,a0+visualRand(0.5,2.4)); ctx.stroke(); }
     _dirtCanvas=c;
   }
   const t=new THREE.CanvasTexture(c); t.wrapS=t.wrapT=THREE.RepeatWrapping; t.repeat.set(3,3); t.anisotropy=MAX_ANISO; return t;
@@ -1174,7 +1192,7 @@ function makeCrowdTexture(){
   const cols=['#d94f4f','#4f7fd9','#e0c14a','#54b06a','#c75fd0','#e08a3c','#e8e8e8','#46c2c2','#d96a9a','#bbbbbb'];
   for(let y=8;y<64;y+=10) for(let x=6;x<128;x+=8){ if(Math.random()<0.12) continue;
     ctx.fillStyle=cols[Math.floor(Math.random()*cols.length)];
-    ctx.beginPath(); ctx.arc(x+rand(-2,2),y+rand(-2,2),rand(2.0,3.3),0,7); ctx.fill(); }
+    ctx.beginPath(); ctx.arc(x+visualRand(-2,2),y+visualRand(-2,2),visualRand(2.0,3.3),0,7); ctx.fill(); }
   return new THREE.CanvasTexture(c);
 }
 function buildBleacher(x,z,faceAngle){
@@ -1211,7 +1229,7 @@ function buildTrackWall(side){
   m.receiveShadow=true; m.castShadow=true; levelGroup.add(m);
 }
 function placeBleachersAround(minR){
-  const n=5+Math.floor(Math.random()*3); const out=[];
+  const n=5+Math.floor(random()*3); const out=[];
   for(let i=0;i<n;i++){ const u=rand(0,TAU);
     const baseR=(typeof minR==='function')?minR(u):minR;
     const r=baseR+rand(10,24); const x=Math.cos(u)*r, z=Math.sin(u)*r;
@@ -1965,6 +1983,7 @@ class Car{
     this.ai={ target:null, retarget:0, aggro:rand(.85,1.12), cornerBomber:Math.random()<1/6 };
     this.cumU=0; this.prevU=0; this.laps=0; this.finished=false;
     this.lapTimes=[]; this.lapStartedAt=0; this.finishTime=null; this.eliminated=false;
+    this.recoveryLock=0;
   }
   reset(x,z,angle){
     this.x=x; this.z=z; this.y=0; this.angle=angle;
@@ -1982,6 +2001,8 @@ class Car{
     this.cumU=Game.levelType==='derby'?0:(u0>0.5?u0-1:u0); // measure laps from the finish line, not each grid slot
     this.prevU=u0; this.prevUWarn=u0; this.laps=0; this.finished=false; this.finishOrder=0; this.removed=false;
     this.lapTimes=[]; this.lapStartedAt=0; this.finishTime=null; this.eliminated=false;
+    this.recoveryLock=0;
+    if(this.ai){delete this.ai.lane;delete this.ai.targetLane;this.ai.laneTimer=0;}
     this.mesh.visible=true; this.applyDamageVisual(); this.syncMesh(0);
   }
   get speed(){ return Math.hypot(this.vx,this.vz); }
@@ -1998,6 +2019,7 @@ class Car{
     this.rampCd-=dt;
     // ---- power-up timers ----
     if(this.nitroT>0) this.nitroT-=dt; if(this.shieldT>0) this.shieldT-=dt; if(this.dmgT>0) this.dmgT-=dt;
+    if(this.recoveryLock>0){this.recoveryLock=Math.max(0,this.recoveryLock-dt);this.vx=this.vz=this.omega=0;this.integrate(dt);return;}
     // ---- damage limp: low health saps power, steering & makes the engine cut out / sputter ----
     const hf=this.health/this.maxHealth;
     let limp=1, steerMul=1; this.engineCut=false;
@@ -2104,6 +2126,7 @@ class Car{
   }
 
   damage(amount,attacker){
+    if(this.recoveryLock>0)return;
     if(!this.alive || this.removed || amount<=0) return;
     if(this.shieldT>0){ this.hitFlash=0.4; if(this.shieldRing) this.shieldRing.userData.flash=1; return; }   // shield absorbs it
     if(attacker) this.lastHitBy=attacker;
@@ -2690,7 +2713,7 @@ const ARENA_CHOICES=[
   {key:'dirt8',label:'Dirt figure eight',type:'figure8',dirt:true}
 ];
 const Game={ state:'menu', round:1, levelType:'derby', trackWalls:false, eventType:'standard', eliminationLap:0, cars:[], player:null,
-  arenaChoice:'tour', raceFormat:'standard', raceTime:0,
+  arenaChoice:'tour', raceFormat:'standard', raceTime:0, trial:null, recoveryHold:0, recoveryCooldown:0,
   ramps:[], barrels:[], tires:[], floods:[], powerups:[], cityBuildings:[], trees:[], poleSpots:[], reveal:0, countdown:0, countLast:null, shake:0, paused:false, elapsed:0,
   drift:{score:0, active:false, mult:1, grace:0}, levelDrift:0,
   score:0, levelHits:0, levelWrecks:0, levelFatalities:0, wrongTimer:0, lastBreakdown:null,
@@ -2698,7 +2721,7 @@ const Game={ state:'menu', round:1, levelType:'derby', trackWalls:false, eventTy
   cash:0, upgrades:Object.fromEntries(PLAYER_TYPES.map(k=>[k,{engine:0,armor:0,ram:0,grip:0}])),
   difficulty:'normal', diff:DIFFICULTY.normal, volume:0.5, progScale:1,
   championship:{rounds:0,points:{}}, finishSeq:0, towTruck:null, pullout:{x:0,z:0,angle:0}, _hlOn:false, _timers:[] };
-const input={ throttle:0, steer:0, rawSteer:0, hand:false }; const keys={};
+const input={ throttle:0, steer:0, rawSteer:0, hand:false, recover:false }; const keys={};
 const kbInput={throttle:0,steer:0,hand:false}; let gamepadStartHeld=false;
 const touchPointers=new Map(), touchInput={throttle:0,steer:0,hand:false};
 // Round-scoped timers: anything deferred with setTimeout during a round (explosion particles, crash-sound
@@ -2723,7 +2746,8 @@ function loadCareer(){
     if(PLAYER_TYPES.includes(s.playerVehicle)) Game.playerVehicle=s.playerVehicle;
     if(PLAYER_PAINTS.includes(s.playerColor)) Game.playerColor=s.playerColor;
     if(ARENA_CHOICES.some(a=>a.key===s.arenaChoice)) Game.arenaChoice=s.arenaChoice;
-    if(['standard','elimination'].includes(s.raceFormat)) Game.raceFormat=s.raceFormat;
+    if(['standard','elimination','trial'].includes(s.raceFormat)) Game.raceFormat=s.raceFormat;
+    if(Game.raceFormat==='trial' && ['tour','derby'].includes(Game.arenaChoice))Game.arenaChoice='circuit';
   }catch(e){}
 }
 function saveCareer(){
@@ -2731,6 +2755,118 @@ function saveCareer(){
     cash:Game.cash, upgrades:Game.upgrades, difficulty:Game.difficulty, volume:Game.volume, playerVehicle:Game.playerVehicle, playerColor:Game.playerColor,
     arenaChoice:Game.arenaChoice, raceFormat:Game.raceFormat
   })); }catch(e){}
+}
+
+/* ---------------- fixed-course time trials and personal ghosts ---------------- */
+const TRIAL_VERSION=1, GHOST_INTERVAL=.1, GHOST_LIMIT=18000;
+function trialKey(){
+  const u=Game.upgrades[Game.playerVehicle];
+  return 'bentMetalGhost'+TRIAL_VERSION+'_'+Game.arenaChoice+'_'+Game.playerVehicle+'_'+['engine','armor','ram','grip'].map(k=>u[k]||0).join('');
+}
+function loadGhost(key){
+  try{
+    const g=JSON.parse(localStorage.getItem(key));
+    if(!g || !Number.isFinite(g.time) || g.time<=0 || g.time>GHOST_LIMIT*GHOST_INTERVAL || !Array.isArray(g.samples) || g.samples.length<2 || g.samples.length>GHOST_LIMIT+2)return null;
+    let prev=-1;
+    for(const s of g.samples){
+      if(!Array.isArray(s)||s.length!==6||!s.every(Number.isFinite)||s[0]<=prev||s[0]<0||s[0]>g.time+.002||s.slice(1,5).some(v=>Math.abs(v)>100000)||(s[5]!==0&&s[5]!==1))return null;
+      prev=s[0];
+    }
+    if(g.samples[0][0]!==0 || Math.abs(prev-g.time)>.002)return null;
+    return g;
+  }catch(e){return null;}
+}
+function ghostPose(samples,time){
+  if(time<=samples[0][0])return samples[0].slice(1,5);
+  let lo=0,hi=samples.length-1;
+  while(lo+1<hi){const mid=(lo+hi)>>1;if(samples[mid][0]<=time)lo=mid;else hi=mid;}
+  const a=samples[lo],b=samples[hi],f=clamp((time-a[0])/(b[0]-a[0]),0,1);
+  if(b[5] && f<1)return a.slice(1,5); // a recovery jumps to the road, never sweeps across the scenery
+  return [lerp(a[1],b[1],f),lerp(a[2],b[2],f),lerp(a[3],b[3],f),a[4]+angleDelta(b[4],a[4])*f];
+}
+function createGhostMesh(){
+  const materials=new Map();
+  const material=m=>{
+    if(!materials.has(m)){const n=m.clone();n.transparent=true;n.opacity=.28;n.depthWrite=false;
+      if(n.color)n.color.setHex(0x58e8ff);if(n.emissive){n.emissive.setHex(0x168caa);n.emissiveIntensity=.7;}materials.set(m,n);}
+    return materials.get(m);
+  };
+  const copy=o=>{
+    const g=o.isMesh?new THREE.Mesh(o.geometry,Array.isArray(o.material)?o.material.map(material):material(o.material)):new THREE.Group();
+    g.position.copy(o.position);g.quaternion.copy(o.quaternion);g.scale.copy(o.scale);
+    for(const child of o.children)g.add(copy(child));return g;
+  };
+  const mesh=copy(Game.player.mesh);levelGroup.add(mesh);return mesh; // visual only; absent from Game.cars and all collisions
+}
+function initTimeTrial(){
+  const key=trialKey(),best=loadGhost(key);
+  Game.trial={key,best,samples:[],nextSample:0,recordable:true,jump:false,mesh:best?createGhostMesh():null};
+  recordTrialFrame(true);
+}
+function recordTrialFrame(force=false){
+  const t=Game.trial,p=Game.player;if(!t)return;
+  const time=p.finishTime??Game.raceTime;
+  if(time>GHOST_LIMIT*GHOST_INTERVAL){t.recordable=false;return;}
+  if(force||p.finished||t.jump||time>=t.nextSample){
+    const ms=Math.round(time*1000)/1000;
+    const sample=[ms,...[p.x,p.y,p.z,p.angle].map(v=>Math.round(v*1000)/1000),t.jump?1:0];
+    const last=t.samples[t.samples.length-1];
+    if(last && last[0]===ms)t.samples[t.samples.length-1]=sample;else t.samples.push(sample);
+    t.nextSample=time+GHOST_INTERVAL;t.jump=false;
+  }
+  if(t.mesh){const [x,y,z,a]=ghostPose(t.best.samples,time);t.mesh.position.set(x,y,z);t.mesh.rotation.y=a;t.mesh.visible=time<=t.best.time;}
+}
+function completeTimeTrial(){
+  const t=Game.trial;recordTrialFrame(true);Game.state='roundwon';audio.cutEngine();
+  const time=Math.round(Game.player.finishTime*1000)/1000,previous=t.best?.time??null,newBest=t.recordable && (previous===null||time<previous);
+  let saved=false;
+  if(newBest){const best={time:Math.round(time*1000)/1000,samples:t.samples};
+    try{localStorage.setItem(t.key,JSON.stringify(best));saved=true;}catch(e){}
+  }
+  Game.lastBreakdown={trial:true,timing:raceTiming(),previous,newBest,saved,recordable:t.recordable};
+  banner(newBest?'PERSONAL BEST!':'TRIAL COMPLETE',formatRaceTime(time),2500);roundTimeout(showWin,2500);
+}
+
+/* ---------------- player recovery: hold, find a clear spot, restart with a penalty ---------------- */
+function recoverySpotClear(x,z,p){
+  for(const o of Game.cars)if(o!==p&&!o.removed && (Math.hypot(x-o.x,z-o.z)<7 || Math.hypot(x-o.x-o.vx*.6,z-o.z-o.vz*.6)<7))return false;
+  for(const o of [...Game.barrels,...Game.tires,...Game.trees])if(Math.hypot(x-o.x,z-o.z)<(o.r||1.6)+3)return false;
+  for(const r of Game.ramps)if(Math.hypot(x-r.x,z-r.z)<Math.hypot(r.halfL,r.halfW)+3)return false;
+  for(const b of Game.cityBuildings){const dx=x-b.x,dz=z-b.z;if(Math.abs(dx*b.tx+dz*b.tz)<b.hw+3 && Math.abs(dx*b.nx+dz*b.nz)<b.hd+3)return false;}
+  return true;
+}
+function findRecoverySpot(p){
+  if(Game.levelType==='derby'){
+    const spots=[];for(let x=-32;x<=32;x+=8)for(let z=-32;z<=32;z+=8)if(Math.hypot(x,z)<WALL_R-8)spots.push({x,z,angle:Math.atan2(-x,-z)});
+    spots.sort((a,b)=>Math.hypot(a.x-p.x,a.z-p.z)-Math.hypot(b.x-p.x,b.z-p.z));
+    return spots.find(s=>recoverySpotClear(s.x,s.z,p));
+  }
+  for(let step=0;step<16;step++){
+    const progress=p.cumU-.003-step*.008,a=Course.at(progress);
+    for(const lane of [0,-4,4,-7,7]){
+      if(Math.abs(lane)>Course.halfW-4)continue;
+      const x=a.cx+a.nx*lane,z=a.cz+a.nz*lane;
+      if(recoverySpotClear(x,z,p))return {x,z,angle:Math.atan2(a.tx,a.tz),progress};
+    }
+  }
+}
+function canRecover(){const p=Game.player;return Game.state==='playing'&&!Game.paused&&p&&p.alive&&!p.finished&&p.speed<5&&Math.abs(p.vy)<2&&Game.recoveryCooldown<=0;}
+function recoverPlayer(){
+  if(!canRecover())return false;
+  const p=Game.player,s=findRecoverySpot(p);
+  if(!s){banner('ROAD BLOCKED','Wait for a clear recovery spot');return false;}
+  Object.assign(p,{x:s.x,z:s.z,y:0,angle:s.angle,vx:0,vz:0,vy:0,omega:0,visRoll:0,visPitch:0,rampPitch:0,rampPitchTarget:0,
+    airborne:false,onRamp:false,rampCd:1,groundY:0,_proj:null,recoveryLock:2});
+  if(s.progress!==undefined){p.cumU=s.progress;p.prevU=((s.progress%1)+1)%1;p.prevUWarn=p.prevU;p.laps=Math.max(0,Math.floor(s.progress));}
+  Game.drift={score:0,active:false,mult:1,grace:0};Game.recoveryCooldown=10;Game.recoveryHold=0;Game.wrongTimer=0;
+  if(Game.trial)Game.trial.jump=true;
+  p.syncMesh(0);banner('RECOVERED','2-second restart penalty');return true;
+}
+function updateRecovery(dt){
+  if(Game.state!=='playing'||Game.paused){Game.recoveryHold=0;return;}
+  Game.recoveryCooldown=Math.max(0,Game.recoveryCooldown-dt);
+  if(input.recover&&canRecover()){Game.recoveryHold+=dt;if(Game.recoveryHold>=1.5)recoverPlayer();}
+  else Game.recoveryHold=0;
 }
 
 /* ---------------- power-ups ---------------- */
@@ -2823,6 +2959,13 @@ function clearRoundScene(){
   for(const value of retired) if(!retained.has(value)) value.dispose();
 }
 
+function buildRoundArena(){
+  if(Game.levelType==='derby') buildDerby();
+  else if(Game.levelType==='city'){ genCity(); buildCityTrack(); }
+  else if(Game.levelType==='figure8'){ genFigureEight(); buildDirtTrack(!Game.dirtTrack); }
+  else if(Game.dirtTrack){ genDirtTrack(); buildDirtTrack(); }
+  else { genTrack(); Course.setPolar(); buildRaceTrack(); }
+}
 function startRound(r){
   clearRoundTimeouts();   // cancel any explosion/crash/overlay timers still pending from the previous round
   Game.paused=false; acc=0; clearControls(); Game.camSign=1; Game.camRev=false; Game.shake=0;
@@ -2831,11 +2974,14 @@ function startRound(r){
     const bn=$('banner'); bn.style.opacity=0; clearTimeout(banner._t);
     $('wrongway').style.opacity=0; }
   clearRoundScene();
+  Game.trial=null;Game.recoveryHold=0;Game.recoveryCooldown=0;
   if(particles) particles.clear();
   if(skidMarks) skidMarks.reset();
   Game.cars=[]; Game.ramps=[]; Game.barrels=[]; Game.tires=[]; Game.floods=[]; Game.powerups=[]; Game.cityBuildings=[]; Game.trees=[]; Game.poleSpots=[]; Game.roadMat=null; Game.towTruck=null;
   // A favorite arena stays selected; the mixed tour rolls a new arena each round.
   Game.round=r;
+  const trial=Game.raceFormat==='trial';
+  if(trial && ['tour','derby'].includes(Game.arenaChoice))Game.arenaChoice='circuit';
   const arena=ARENA_CHOICES.find(a=>a.key===Game.arenaChoice)||ARENA_CHOICES[0];
   const ARENA_TYPES=['derby','race','city','figure8'];
   Game.levelType=arena.type||ARENA_TYPES[Math.floor(Math.random()*ARENA_TYPES.length)];
@@ -2844,9 +2990,9 @@ function startRound(r){
   Game.levelHits=0; Game.levelWrecks=0; Game.levelFatalities=0; Game.wrongTimer=0;
   Game.levelDrift=0; Game.drift={score:0, active:false, mult:1, grace:0}; Game.lastBreakdown=null;
   _pairHitCd.clear(); _pairGrind.clear(); _grindSndCd=0;
-  Game.night = Math.random()<0.38;                       // some levels run at night
+  Game.night = trial?false:Math.random()<0.38;
   Game.dirtTrack = arena.dirt ?? ((Game.levelType==='race'||Game.levelType==='figure8') && Math.random()<0.45);
-  Game.rain = !Game.dirtTrack && Math.random()<0.32;
+  Game.rain = !trial && !Game.dirtTrack && Math.random()<0.32;
   Game.gripMult = Game.dirtTrack ? 0.72 : Game.rain ? 0.82 : 1.0;     // wet asphalt lengthens slides without becoming ice
   if(groundMesh){ groundMesh.material.map = Game.dirtTrack ? groundDirtTex : grassTex; groundMesh.material.needsUpdate=true; }
   Game.finishSeq=0;
@@ -2854,15 +3000,11 @@ function startRound(r){
   // tier 0 = rounds 1-3 (×1.0), tier 1 = rounds 4-6 (×1.07), etc.
   Game.progScale = 1 + Math.floor((r-1)/3) * 0.07;
 
-  if(Game.levelType==='derby') buildDerby();
-  else if(Game.levelType==='city'){ genCity(); buildCityTrack(); }
-  else if(Game.levelType==='figure8'){ genFigureEight(); buildDirtTrack(!Game.dirtTrack); }
-  else if(Game.dirtTrack){ genDirtTrack(); buildDirtTrack(); }   // dirt race = rally loop w/ a drift hairpin
-  else { genTrack(); Course.setPolar(); buildRaceTrack(); }
-  spawnPowerups();
+  if(trial)withLayoutSeed(1729+ARENA_CHOICES.indexOf(arena)*1009,buildRoundArena);else buildRoundArena();
+  if(!trial)spawnPowerups();
   applyEnvironment();
 
-  const opponents = Math.min(3 + r + Game.diff.extra, 7);   // harder difficulty fields one more rival
+  const opponents = trial?0:Math.min(3 + r + Game.diff.extra, 7);
   const total = opponents+1;
   for(let i=0;i<total;i++){
     const isP=(i===0); const color=isP?Game.playerColor:PALETTE[i%PALETTE.length];
@@ -2883,22 +3025,23 @@ function startRound(r){
     Game.cars.push(car); if(isP) Game.player=car;
   }
   // spawn tow truck parked at the pullout — it drives out to retrieve dead cars between retrievals
-  { const tow=new Car(0xffaa00,false,'TOW','tow');
+  if(!trial){ const tow=new Car(0xffaa00,false,'TOW','tow');
     tow.isTow=true;
     tow.towState={mode:'idle',target:null,hookDist:6.5,idleTimer:2};
     tow.reset(Game.pullout.x,Game.pullout.z,Game.pullout.angle);
     Game.cars.push(tow); Game.towTruck=tow; }
+  if(trial)initTimeTrial();
   Game.state='countdown'; Game.countdown=3.2; Game.countLast=null; Game.elapsed=0;
   audio.resume();
   if(Game.player) audio.engine(0,0,false,Game.player.enginePitch,Game.player.engineLump); // restart at idle for the countdown
   const modeName = Game.levelType==='derby'?'DERBY' : Game.levelType==='city'?'CITY' : Game.levelType==='figure8'?(Game.dirtTrack?'DIRT FIGURE 8':'FIGURE 8'):Game.dirtTrack?'DIRT RALLY':'RACE';
-  document.getElementById('roundLabel').textContent = 'ROUND '+r+' · '+modeName;
+  document.getElementById('roundLabel').textContent = (trial?'TRIAL':'ROUND '+r)+' · '+modeName;
   setHudMode();
   // DON'T reveal yet — keep the loading screen covering the scene until the loop has actually drawn the new
   // level (see the reveal countdown at the end of loop()). This guarantees the track is fully painted first.
   Game.reveal=2;
-  const sub = opponents+' RIVALS'+(Game.rain?' · WET':'');
-  banner(Game.eventType==='elimination' ? 'ELIMINATION · 3 LAPS'
+  const sub = trial?(Game.trial.best?'CHASE YOUR PERSONAL BEST':'SET YOUR FIRST GHOST'):opponents+' RIVALS'+(Game.rain?' · WET':'');
+  banner(trial?'TIME TRIAL · 3 LAPS':Game.eventType==='elimination' ? 'ELIMINATION · 3 LAPS'
        : Game.levelType==='derby' ? 'DERBY'
        : Game.levelType==='city'  ? 'CITY · 3 LAPS'
        : ((Game.levelType==='figure8'?(Game.dirtTrack?'DIRT FIGURE 8':'FIGURE 8'):Game.dirtTrack?'DIRT RACE':'RACE')+' · 3 LAPS'), sub);
@@ -2967,40 +3110,75 @@ function driveDerbyAI(c,dt){
   ctrl.steer=aiSteer(c,ctrl.steer,dt);
   return ctrl;
 }
+// Choose a stable passing lane, then look ahead far enough to brake for traffic and bends.
+function raceTraffic(c,pr,reach){
+  const out=[];
+  const add=(o,r,moving)=>{
+    const dx=o.x-c.x,dz=o.z-c.z;
+    if(dx*dx+dz*dz>(reach+10)**2 || o.removed || Math.abs((o.y||0)-c.y)>2.5)return;
+    const along=dx*pr.tx+dz*pr.tz,side=pr.lateral+dx*pr.nx+dz*pr.nz;
+    const aheadSpeed=moving?(o.vx*pr.tx+o.vz*pr.tz):0;
+    const lateralSpeed=moving?(o.vx*pr.nx+o.vz*pr.nz):0;
+    if(along>-6 && along<reach)out.push({along,side:side+lateralSpeed*.35,r,speed:Math.max(0,aheadSpeed),car:moving?o:null});
+  };
+  for(const o of Game.cars)if(o!==c)add(o,2.4,true);
+  for(const o of Game.barrels)add(o,1.8,false);
+  for(const o of Game.tires)add(o,2.3,false);
+  return out;
+}
 function driveRaceAI(c,dt){
-  const rec=aiStuckRecovery(c,dt); if(rec) return rec;
-  // PRIMARY GOAL: follow the racing line (works for the smooth oval AND the rectilinear city loop)
-  const pr=projectCourseForCar(c);
-  const lookU = Course.mode==='polar' ? 0.0223 : Math.min(0.06, 9/Course.total);
-  const ah=Course.at(pr.u+lookU); const adx=ah.cx-c.x, adz=ah.cz-c.z; const desired=Math.atan2(adx,adz);
-  let diff=desired-c.angle; while(diff>Math.PI)diff-=TAU; while(diff<-Math.PI)diff+=TAU;
+  const rec=aiStuckRecovery(c,dt); if(rec)return rec;
+  const pr=projectCourseForCar(c),ai=c.ai;
+  const length=Course.mode==='polar'?TAU*TRK.R0:Course.total;
+  let look=clamp(9+c.speed*.42,10,24);const reach=clamp(14+c.speed*.8,20,44);
+  const traffic=raceTraffic(c,pr,reach),limit=Math.max(2,Course.halfW-4.5);
+  const base=((c.id%3)-1)*Math.min(2.5,limit);
+  const cost=lane=>{
+    let score=Math.abs(lane-pr.lateral)*.12+Math.abs(lane-base)*.06;
+    for(const o of traffic){
+      const gap=Math.abs(lane-o.side),clearance=o.r+1.6;
+      if(gap<clearance)score+=(1-gap/clearance)*(o.along<8?35:18)*(1-Math.max(0,o.along)/reach);
+    }
+    return score;
+  };
+  ai.laneTimer=Math.max(0,(ai.laneTimer||0)-dt);
+  if(ai.lane===undefined)ai.lane=clamp(pr.lateral,-limit,limit);
+  if(ai.targetLane===undefined)ai.targetLane=base;
+  if(ai.laneTimer===0 || cost(ai.targetLane)>12){
+    let best=ai.targetLane,score=cost(best);
+    for(const lane of [-limit,-limit*.5,base,0,limit*.5,limit]){
+      const n=cost(lane);if(n<score-.25){score=n;best=lane;}
+    }
+    ai.targetLane=best;ai.laneTimer=1.2;
+  }
+  ai.lane=lerp(ai.lane,ai.targetLane,1-Math.exp(-2.5*dt));
+  for(const o of traffic)if(o.along>3&&o.along<12&&Math.abs(pr.lateral-o.side)<o.r+1.8&&Math.abs(ai.targetLane-o.side)>o.r+1.8)look=Math.min(look,Math.max(6,o.along-2));
+  const aim=Course.at(pr.u+look/length);
+  const dx=aim.cx+aim.nx*ai.lane-c.x,dz=aim.cz+aim.nz*ai.lane-c.z;
+  const diff=angleDelta(Math.atan2(dx,dz),c.angle);
+  let turn=0;
+  for(const dist of [look,look+10,look+22]){
+    const a=Course.at(pr.u+dist/length);turn=Math.max(turn,Math.abs(angleDelta(Math.atan2(a.tx,a.tz),Math.atan2(pr.tx,pr.tz))));
+  }
+  // Brake before a tight turn; loose dirt and heavier steering need lower entry speeds.
+  let target=(c.topSpeedEst||TOP_SPEED)*clamp(ai.aggro,.85,1.1);
+  if(turn>.35)target=Math.min(target,Math.max(10,Math.sqrt(19*Math.max(.65,Game.gripMult)*(c.turnRate/CAR.turnRate)/Math.max(.025,turn/24))));
+  if(Math.abs(diff)>1)target=Math.min(target,12);
+  for(const o of traffic){
+    if(o.along>0 && Math.abs(pr.lateral-o.side)<o.r+1.8){
+      const passing=Math.abs(ai.targetLane-o.side)>o.r+1.8;
+      if(!(passing&&o.along>12))target=Math.min(target,Math.max(passing&&o.along>4?5.5:0,o.speed+Math.max(0,o.along-6)*.9));
+    }
+  }
   let steer=clamp(diff*1.7,-1,1);
-
-  // SECONDARY: shove/block the nearest LIVING rival (only modest steering nudges, never abandon the line).
-  // In the tight city we ease this WAY off — hard shoving just bounced rivals into the buildings.
-  const ramScale = (Game.levelType==='city') ? 0.45 : 1.0;
-  let best=null,bd=1e9;
-  for(const o of Game.cars){ if(o===c||!o.alive||o.isTow) continue; const d=(o.x-c.x)**2+(o.z-c.z)**2; if(d<bd){bd=d;best=o;} }
-  if(best && bd<210){
-    const rdx=best.x-c.x, rdz=best.z-c.z;
-    const fwd =Math.sin(c.angle)*rdx+Math.cos(c.angle)*rdz;     // ahead(+)/behind(-)
-    const side=Math.cos(c.angle)*rdx-Math.sin(c.angle)*rdz;     // right(+)/left(-)
-    const ss = clamp(side*0.5,-1,1);   // smooth side sign: ±1 when clearly to one side, fades through 0 dead-ahead (no per-frame flip)
-    if(Math.abs(fwd)<4.8 && Math.abs(side)<5)            steer += ss*0.35*ramScale;  // alongside -> push them toward the wall
-    else if(fwd>2 && fwd<11 && Math.abs(side)<5.5)        steer += ss*0.18*ramScale;  // just ahead -> lean in to ram/overtake
-    else if(fwd<-1.5 && fwd>-12 && Math.abs(side)<7)      steer += ss*0.22*ramScale;  // behind & passing -> move across to block
+  // Controlled contact on straights keeps the derby character without steering into a pileup.
+  if(turn<.3 && c.speed>10 && Math.abs(pr.lateral)<limit-1){
+    const rival=traffic.find(o=>o.car&&o.car.alive&&!o.car.isTow&&Math.abs(o.along)<3&&Math.abs(o.side-pr.lateral)>3&&Math.abs(o.side-pr.lateral)<5);
+    if(rival)steer+=clamp((rival.side-pr.lateral)*.015,-.075,.075);
   }
-  steer=aiSteer(c, clamp(steer,-1,1), dt);
-  let throttle = c.finished ? 0.25 : clamp(1-Math.abs(diff)*0.12, 0.62, 1)*c.ai.aggro;
-  // corner braking: only scrub for genuinely sharp bends, and not by much — a well-steered car can carry
-  // most corners near top speed, so the field stays fast & competitive (no deliberate overshoots anymore)
-  if(!c.finished){
-    const t1=Course.at(pr.u + (Course.mode==='polar'?0.045:Math.min(0.09,15/Course.total)));
-    let turn=Math.atan2(t1.tx,t1.tz)-Math.atan2(pr.tx,pr.tz); while(turn>Math.PI)turn-=TAU; while(turn<-Math.PI)turn+=TAU;
-    const sharp=Math.abs(turn);
-    if(sharp>0.75) throttle *= clamp(1-(sharp-0.75)*0.8, 0.5, 1);
-  }
-  return { steer, throttle, hand:false };
+  const forward=c.vx*Math.sin(c.angle)+c.vz*Math.cos(c.angle);
+  const throttle=c.finished?.15:forward>target+2?-clamp((forward-target)/8,.2,1):forward>target?.05:clamp((target-forward)*.22,.25,1);
+  return {steer:aiSteer(c,clamp(steer,-1,1),dt),throttle,hand:false};
 }
 
 // Steer the tow truck AROUND ramps in its path (it's heavy and low-power, so climbing one strands it).
@@ -3407,6 +3585,7 @@ function bankDrift(){ const D=Game.drift; if(!D.active) return;
   D.active=false; D.score=0; D.mult=1;
 }
 function updateDrift(dt){
+  if(Game.eventType==='trial')return;
   const p=Game.player; if(!p) return; const D=Game.drift;
   if(!p.alive){ D.active=false; D.score=0; D.mult=1; D.grace=0; return; }
   if(!Game.dirtTrack || p.y>0.3){ if(D.active) bankDrift(); return; }
@@ -3457,6 +3636,7 @@ function updateRaceProgress(dt=1/60){
   }
   Game.wrongTimer = p&&p.alive&&!p.finished&&p.speed>5&&playerDelta<-0.00001 ? Game.wrongTimer+dt : 0;
   const ww=document.getElementById('wrongway'); if(ww) ww.style.opacity = Game.wrongTimer>0.5?1:0;
+  if(Game.trial)recordTrialFrame();
 }
 function progress(c){ return c.cumU; }
 function raceOrder(a,b){
@@ -3478,6 +3658,7 @@ function timingRows(t){ return boardRow(t.finished?'Race time':'Time raced',form
 function checkLevelEnd(){
   if(Game.state!=='playing') return;
   if(!Game.player || !Game.player.alive){ if(!Game.player) return; endGameOver(); return; }
+  if(Game.eventType==='trial'){if(Game.player.finished)completeTimeTrial();return;}
   const aliveOthers=Game.cars.filter(c=>c!==Game.player && c.alive && !c.isTow);
   if(Game.levelType==='derby'){
     if(aliveOthers.length===0) completeLevel(1,1,true,'LAST CAR RUNNING',WIN_BONUS,true);
@@ -3531,7 +3712,7 @@ function championshipRows(){
   entries.slice(0,6).forEach(([name,pts],i)=>h+=boardRow((i+1)+'. '+name,pts,name!=='YOU'));
   return h;
 }
-function endGameOver(){ Game.state='gameover'; audio.cutEngine(); recordChampionship(); banner(Game.lives>0?(Game.player.eliminated?'ELIMINATED':'WRECKED'):'GAME OVER','',3000); roundTimeout(showLose,3000); }
+function endGameOver(){ Game.state='gameover'; audio.cutEngine(); if(Game.eventType!=='trial')recordChampionship(); banner(Game.eventType==='trial'?'TRIAL ENDED':Game.lives>0?(Game.player.eliminated?'ELIMINATED':'WRECKED'):'GAME OVER','',3000); roundTimeout(showLose,3000); }
 
 /* ====================================================================
    CAMERA
@@ -3560,11 +3741,14 @@ const $=id=>document.getElementById(id);
 function hud(show){ $('hud').classList.toggle('hidden',!show); }
 function setHudMode(){
   const race=Game.levelType!=='derby';   // race + city are lap-based
+  const trial=Game.eventType==='trial';
+  for(const id of ['livesRow','scoreRow','hitsRow'])$(id).style.display=trial?'none':'flex';
   $('modeKey').textContent = race?'Lap':'Cars left';
-  $('posRow').style.display = race?'flex':'none';
+  $('posRow').style.display = race&&!trial?'flex':'none';
   $('placeBadge').style.display = race?'block':'none';
   $('raceClock').style.display = race?'block':'none';
-  $('raceClockLabel').textContent=Game.eventType==='elimination'?'ELIMINATION':'RACE TIME';
+  $('raceClockLabel').textContent=trial?'TIME TRIAL':Game.eventType==='elimination'?'ELIMINATION':'RACE TIME';
+  $('placeOrd').style.fontSize=trial?'18px':'';
   $('raceTime').textContent='0:00.000'; $('bestLap').textContent='BEST LAP —';
   $('wrongway').style.opacity = 0;
 }
@@ -3599,6 +3783,18 @@ function buildVehChips(containerId){
 function buildWinVehChips(){  buildVehChips('winVehBtns');  }
 function buildLoseVehChips(){ buildVehChips('loseVehBtns'); }
 function showWin(){
+  const trial=Game.lastBreakdown.trial;
+  $('trialHomeBtn').classList.toggle('hidden',!trial);$('nextBtn').textContent=trial?'RACE AGAIN':'NEXT ROUND →';
+  if(trial){
+    const b=Game.lastBreakdown;
+    $('winTitle').textContent=b.newBest?'PERSONAL BEST!':'TRIAL COMPLETE';$('winTitle').className='title winColor';
+    $('winSub').textContent='Same course · same vehicle setup';
+    let html=timingRows(b.timing);
+    Game.player.lapTimes.forEach((time,i)=>html+=boardRow('Lap '+(i+1),formatRaceTime(time),true));
+    if(b.previous!==null){html+=boardRow('Previous best',formatRaceTime(b.previous));const delta=(Math.round(b.timing.time*1000)-Math.round(b.previous*1000))/1000;html+=boardRow('Difference',(delta<0?'−':'+')+Math.abs(delta).toFixed(3)+'s');}
+    html+=boardRow('Ghost',b.newBest?(b.saved?'Saved for next attempt':'Storage unavailable'):b.recordable?'Previous best kept':'Run too long to save');
+    $('winBoard').innerHTML=html;buildWinVehChips();showOverlay('winScreen');hud(false);return;
+  }
   const b=Game.lastBreakdown; let html=''; const payout=Math.round(b.earned*b.mult);
   if(b.race){
     $('winTitle').textContent = b.standing ? 'LAST CAR RUNNING' : (b.place===1?'YOU WON THE RACE':'PODIUM FINISH');
@@ -3629,6 +3825,12 @@ function showWin(){
   html+=championshipRows(); $('winBoard').innerHTML=html; refreshCashTags(); buildWinVehChips(); showOverlay('winScreen'); hud(false);
 }
 function showLose(){
+  if(Game.eventType==='trial'){
+    $('loseTitle').textContent='TRIAL ENDED';$('loseSub').textContent='Try again on the same course';
+    $('retryBtn').style.display='';$('retryBtn').textContent='TRY AGAIN';
+    $('loseBoard').innerHTML=timingRows(raceTiming())+boardRow('Personal best',formatRaceTime(Game.trial.best?.time??null));
+    buildLoseVehChips();showOverlay('loseScreen');hud(false);return;
+  }
   const bd=Game.lastBreakdown, raceLoss=bd&&bd.raceLoss;
   const canContinue=Game.lives>0;
   $('retryBtn').style.display=canContinue?'':'none';   // hide retry when out of lives — HOME is the only restart path
@@ -3675,10 +3877,14 @@ function updateHUD(){
       active.reduce((a,b)=>a.cumU<b.cumU?a:b)===p;
     $('placeSub').textContent=atRisk?'AT RISK':'POSITION';
     $('placeSub').style.color=atRisk?'var(--bad)':'';
+    if(Game.eventType==='trial'){$('placeOrd').textContent=formatRaceTime(Game.trial.best?.time??null);$('placeSub').textContent='PERSONAL BEST';}
   }else{
     $('modeVal').textContent = aliveCars().length;
   }
   $('speedVal').textContent=Math.round(p.speed*2.237);
+  const rb=$('recoverBtn'),held=Game.recoveryHold>0;
+  rb.disabled=!canRecover()&&!held;
+  rb.textContent=p.recoveryLock>0?'RESTART '+Math.ceil(p.recoveryLock)+'s':Game.recoveryCooldown>0?'RECOVER · '+Math.ceil(Game.recoveryCooldown)+'s':held?'HOLD · '+Math.max(0,1.5-Game.recoveryHold).toFixed(1)+'s':'HOLD TO RECOVER';
   // active power-up buffs
   let buffHtml='';
   if(p.nitroT>0)  buffHtml+='<span class="buff" style="color:#3da0ff">⚡ '+p.nitroT.toFixed(0)+'</span>';
@@ -3687,7 +3893,7 @@ function updateHUD(){
   $('buffs').innerHTML=buffHtml;
   // drift combo readout (dirt tracks only)
   const D=Game.drift;
-  if(D.active && D.score>20){ $('driftHud').style.display='block';
+  if(D.active && D.score>20 && Game.wrongTimer<=.5){ $('driftHud').style.display='block';
     $('driftScore').textContent=Math.round(D.score).toLocaleString(); $('driftMult').textContent='×'+D.mult; }
   else $('driftHud').style.display='none';
 }
@@ -3785,6 +3991,7 @@ function loop(){
     else if(n!==Game.countLast){ Game.countLast=n; if(n>0) banner(String(n),''); } }
 
   if(!Game.paused && (Game.state==='playing'||Game.state==='countdown'||Game.state==='roundwon'||Game.state==='gameover')){
+    updateRecovery(dt);
     // progressive steering: ramps to full over ~1s, counter-steer straightens instantly, release eases out over ~0.25s
     { const raw=input.rawSteer;
       if(raw!==0){
@@ -3798,7 +4005,7 @@ function loop(){
     for(let i=0;i<Game.cars.length;i++){ const c=Game.cars[i];
       _ctrlArr[i] = (Game.state!=='playing') ? _IDLE_CTRL                       // shared idle object (read-only in physics)
         : c.isTow                            ? driveTowAI(c,dt)                 // tow truck has its own state machine
-        : c.isPlayer                         ? {throttle:input.throttle,steer:input.steer,hand:input.hand}
+        : c.isPlayer                         ? (Game.recoveryHold>0?{throttle:0,steer:0,hand:true}:{throttle:input.throttle,steer:input.steer,hand:input.hand})
         : !c.alive                           ? _IDLE_CTRL
         : (Game.levelType==='derby' ? driveDerbyAI(c,dt) : driveRaceAI(c,dt));
     }
@@ -3877,6 +4084,7 @@ function pollGamepad(){
   let pads=[]; try{ pads=navigator.getGamepads?navigator.getGamepads():[]; }catch(e){}
   const p=Array.from(pads||[]).find(Boolean);
   const throttle=clamp(kbInput.throttle+touchInput.throttle,-1,1), steering=clamp(kbInput.steer+touchInput.steer,-1,1);
+  input.recover=!!keys.r||Array.from(touchPointers.values()).includes('recover')||!!p?.buttons[3]?.pressed;
   if(!p){ input.throttle=throttle; input.rawSteer=steering; input.hand=kbInput.hand||touchInput.hand; gamepadStartHeld=false; return; }
   const dead=(v,d=0.14)=>Math.abs(v)<d?0:(Math.abs(v)-d)/(1-d)*Math.sign(v);
   const steer=dead(p.axes[0]||0), gas=p.buttons[7]?.value||0, brake=p.buttons[6]?.value||0;
@@ -3893,6 +4101,7 @@ function rumble(strength,ms){
   }catch(e){} // unsupported haptics must never interrupt collision handling
 }
 function clearControls(){
+  Game.recoveryHold=0;input.recover=false;
   for(const k in keys) keys[k]=false;
   touchPointers.clear(); touchInput.throttle=touchInput.steer=0; touchInput.hand=false;
   for(const b of document.querySelectorAll('[data-touch]')) b.classList.remove('pressed');
@@ -4040,8 +4249,10 @@ function buildDiffChips(){
 function refreshCashTags(){ $('startCash').textContent='$'+Game.cash.toLocaleString(); if($('garageCash')) $('garageCash').textContent='$'+Game.cash.toLocaleString(); }
 function refreshEventUI(){
   const derby=Game.arenaChoice==='derby';
-  $('arenaSelect').value=Game.arenaChoice; $('formatSelect').value=derby?'standard':Game.raceFormat; $('formatSelect').disabled=derby;
-  $('eventHint').textContent=derby?'Derby: be the last car running.':Game.raceFormat==='elimination'
+  for(const option of $('arenaSelect').children)option.disabled=Game.raceFormat==='trial'&&['tour','derby'].includes(option.value);
+  $('arenaSelect').value=Game.arenaChoice; $('formatSelect').value=derby?'standard':Game.raceFormat;
+  for(const option of $('formatSelect').children)option.disabled=derby&&option.value==='elimination';
+  $('eventHint').textContent=Game.raceFormat==='trial'?'3 laps · Fixed course · Ghost for this vehicle setup.':derby?'Derby: be the last car running.':Game.raceFormat==='elimination'
     ?'Races: last place is out when the leader finishes laps 1 and 2.'
     :Game.arenaChoice==='tour'?'A new arena each round. Races are 3 laps; derby is last car running.'
     :'3 laps. Beat your best lap and fight for the podium.';
@@ -4051,7 +4262,7 @@ function initSetupUI(){
   for(const arena of ARENA_CHOICES){ const option=document.createElement('option'); option.value=arena.key; option.textContent=arena.label; $('arenaSelect').appendChild(option); }
   refreshEventUI();
   $('arenaSelect').addEventListener('change',()=>{ Game.arenaChoice=$('arenaSelect').value; refreshEventUI(); saveCareer(); });
-  $('formatSelect').addEventListener('change',()=>{ Game.raceFormat=$('formatSelect').value; refreshEventUI(); saveCareer(); });
+  $('formatSelect').addEventListener('change',()=>{ Game.raceFormat=$('formatSelect').value;if(Game.raceFormat==='trial'&&['tour','derby'].includes(Game.arenaChoice))Game.arenaChoice='circuit';refreshEventUI(); saveCareer(); });
   const vs=$('volSlider'); vs.value=Math.round(Game.volume*100); $('volVal').textContent=vs.value;
   vs.addEventListener('input',()=>{ Game.volume=clamp(vs.value/100,0,1); $('volVal').textContent=vs.value; audio.setVolume(Game.volume); saveCareer(); });
   $('openGarageBtn').addEventListener('click',()=>openGarage('startScreen'));
@@ -4108,10 +4319,17 @@ $('loseHomeBtn').addEventListener('click',()=>{
   showOverlay('startScreen'); hud(false); refreshCashTags(); buildVehicleChips(); previewHighlight();
 });
 $('loseGarageBtn').addEventListener('click',()=>openGarage('loseScreen'));
+function homeFromRace(){
+  clearRoundTimeouts();clearControls();Game.state='menu';Game.paused=false;audio.cutEngine();
+  showOverlay('startScreen');hud(false);refreshCashTags();buildVehicleChips();refreshEventUI();previewHighlight();
+}
+$('pauseHomeBtn').addEventListener('click',homeFromRace);
+$('trialHomeBtn').addEventListener('click',homeFromRace);
 $('startBtn').addEventListener('click',async()=>{ audio.init(); audio.setVolume(Game.volume); await requestLandscape(); if(Game.state==='menu') go(1,true); });
 $('landscapeRetryBtn').addEventListener('click',requestLandscape);
-$('nextBtn').addEventListener('click',()=>{ go(Game.round+1); });
+$('nextBtn').addEventListener('click',()=>{ go(Game.eventType==='trial'?Game.round:Game.round+1); });
 $('retryBtn').addEventListener('click',()=>{
+  if(Game.eventType==='trial'){if(Game.state!=='loading')go(Game.round);return;}
   if(Game.state==='loading'||Game.lives<=0) return;
   Game.lives--; go(Game.round);   // spent lives stay spent, including retries of round one
 });

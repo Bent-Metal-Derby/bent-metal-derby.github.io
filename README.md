@@ -23,8 +23,13 @@ Open `index.html` in any modern browser or visit https://bent-metal-derby.github
 | Nitro | Activates automatically when collected |
 | Camera reverse | Hold S / ↓ while reversing |
 | Pause | P / Escape (controller Start) |
+| Recover car | Hold R, hold the Recover button, or hold controller Y / Triangle |
 
 On mobile, touch controls appear automatically: forward and brake/reverse on the left, steering and handbrake on the right. Multiple buttons can be held together. The pause button is at the top.
+
+**Recovery** — slow to a stop and hold Recover for 1.5 seconds. The car returns to a clear spot behind its current race progress, keeps its damage, and waits through a 2-second restart penalty. Recovery has a 10-second cooldown and cannot revive a wreck. Pausing cancels an unfinished hold.
+
+The desktop controls legend has an opaque dark background for contrast. Mobile race announcements, fatalities, and drift text use smaller type to keep the road visible.
 
 ---
 
@@ -47,6 +52,10 @@ All arenas can be day or night. Race and figure-eight rounds can use asphalt or 
 **Elimination races** — select Elimination as the race format. When the leader completes lap 1 and lap 2, the last-place car is eliminated. Survive those cuts, then race to the finish on lap 3. The position badge warns **AT RISK** when you are last. Derby rounds always use the usual last-car-running rules.
 
 **Lap timing** — the race clock starts at GO and stops when you finish; pausing stops the clock. Each completed lap shows its time and difference from your previous best. Results include your race time and best lap. Best laps are tracked within the current race because each newly generated course has a different layout.
+
+**Time trials and ghosts** — choose Time trial as the race format and select a paved circuit, dirt rally, city circuit, or either figure-eight surface. Each arena has a fixed course with daytime, dry weather, no rivals, and no power-ups. Finish three laps to save a translucent ghost of your fastest attempt in this browser. Ghosts cannot collide with anything, and records are separate for each arena, vehicle, and upgrade setup. Race Again repeats the course; Home returns to setup. Time trials do not spend lives or earn career cash, score, or championship points. Ghost recordings support attempts up to 30 minutes and require available browser storage.
+
+**Opponent driving** — racers choose stable passing lanes, anticipate moving traffic and wrecks, and brake before tight corners and blocked lanes. They still make controlled contact alongside rivals on straights.
 
 ---
 
@@ -134,7 +143,7 @@ Harder difficulties also field more opponents as rounds progress.
 
 ## Modding
 
-Run the regression checks with `node --test tests/game.test.cjs` (Node.js 22 or newer; no npm install needed). They cover race results, lap timing, elimination rules, collisions, controls, terrain, retries, settings, and generated courses. Rendering and audio use stubs in these tests.
+Run the regression checks with `node --test tests/game.test.cjs` (Node.js 22 or newer; no npm install needed). They cover race results, lap timing, elimination rules, ghost recordings, recovery, opponent traffic decisions, collisions, controls, terrain, retries, settings, and generated courses. Rendering and audio use stubs in these tests.
 
 The entire game is one self-contained HTML file (~3,000 lines). No bundler, no dependencies beyond Three.js r128 loaded from CDN. Everything — physics constants, vehicle stats, arena generation, audio, UI — is in one place and clearly commented.
 
