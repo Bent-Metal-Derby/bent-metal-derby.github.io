@@ -66,6 +66,37 @@ function runtime() {
   return {ctx,run,element,events,frames,touches};
 }
 function check(name,code){test(name,()=>runtime().run(code));}
+check('career rewards retain every contribution without capping the total',`
+  const result={won:true,bonus:6000,mult:1,hits:10,drift:1000,wrecks:2,fatalities:1,raceLoss:false};
+  assert.equal(Economy.reward(result),315);
+  for(const key of ['hits','wrecks','fatalities','bonus','drift']){
+    assert.ok(Economy.reward({...result,[key]:result[key]*2})>Economy.reward(result));
+  }
+  assert.ok(Economy.reward({...result,hits:2000})>1000);
+  assert.equal(Economy.reward({...result,raceLoss:true}),0);
+`);
+check('huge drift scores produce modest cash while ordinary scores remain intact',`
+  const result={won:true,bonus:6000,mult:1,hits:0,drift:0,wrecks:0,fatalities:0,raceLoss:false};
+  const baseline=Economy.reward(result);
+  assert.equal(Economy.reward({...result,drift:1000})-baseline,5);
+  assert.equal(Economy.reward({...result,drift:10000})-baseline,17);
+  assert.equal(Economy.reward({...result,drift:1000000})-baseline,49);
+`);
+check('host admission waits for its callback, debounces clicks and spends a life once',`
+  let approve,calls=0;
+  Economy.transact=(action,done)=>{calls++;approve=done;assert.equal(action.type,'race');};
+  Game.state='gameover';Game.lives=2;
+  go(1,false,true);go(1,false,true);
+  assert.equal(calls,1);assert.equal(Game.state,'gameover');assert.equal(Game.lives,2);
+  approve();approve();assert.equal(Game.state,'loading');assert.equal(Game.lives,1);
+`);
+check('denied admission keeps lives and allows a later attempt',`
+  Economy.transact=(action,done)=>done(false);
+  Game.state='gameover';Game.lives=2;
+  go(1,false,true);assert.equal(Game.state,'gameover');assert.equal(Game.lives,2);assert.equal(Economy.pending,false);
+  Economy.transact=(action,done)=>done();go(1,false,true);
+  assert.equal(Game.state,'loading');assert.equal(Game.lives,1);
+`);
 check('a spent life and score survive retrying round one',`
   clearRoundScene=()=>{}; spawnPowerups=()=>{}; applyEnvironment=()=>{};
   buildDerby=buildRaceTrack=buildCityTrack=buildDirtTrack=()=>{};

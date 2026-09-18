@@ -83,6 +83,14 @@ Progress carries over between sessions via `localStorage`.
 
 **Cash** — earned each round from your combat score, with a placement bonus on races. Cash persists between rounds and is spent in the Garage.
 
+Cash grows more slowly than score: each hit contributes $1, wreck $20, and
+fatality $10, with the existing finish-position multiplier. The finish bonus
+contributes 2.5% of its score value, plus $100 for winning. Drift contributes
+`floor(5 × log2(1 + round drift points / 1000))`: 1,000 drift points earn $5,
+10,000 earn $17, and a million earn $49. Using the round total means splitting
+one drift into many chains does not earn extra cash. Contributions add together
+without a total payout cap. Fourth place or worse still earns nothing.
+
 **Upgrades** — each vehicle has its own independent upgrade track with four stats, each upgradeable up to five levels. Upgrades apply only when that vehicle is selected.
 
 | Upgrade | Effect |
@@ -142,6 +150,16 @@ Harder difficulties also field more opponents as rounds progress.
 ---
 
 ## Modding
+
+Hosts can load a separate script after the game and override
+`Economy.transact(action, done)`. The default implementation starts races for
+free and handles cash, upgrades, and won lives locally. A host can wait for a
+server transaction before calling `done()` to continue, or call `done(false)`
+to decline. Pending requests block duplicate actions; callbacks are one-shot.
+The game owns reward calculations and the actions that follow approval.
+`Economy.format()` and `Economy.livesText()` control currency/life presentation.
+Standalone cash remains unchanged in meaning; Glommer maps $1 to one shared
+chip and a life to 500 chips, including the life awarded for a win.
 
 Run the regression checks with `node --test tests/game.test.cjs` (Node.js 22 or newer; no npm install needed). They cover race results, lap timing, elimination rules, ghost recordings, recovery, opponent traffic decisions, collisions, controls, terrain, retries, settings, and generated courses. Rendering and audio use stubs in these tests.
 

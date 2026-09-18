@@ -2697,6 +2697,44 @@ const UPGRADES=[
 ];
 const UPGRADE_MAX=5;
 const upgradeCost=lvl=>200+lvl*250;                 // rising cost per level
+// Standalone entry remains free. Drift points are score, not cash.
+const Economy={
+  reward({won,bonus,mult,hits,drift,wrecks,fatalities,raceLoss}){
+    if(raceLoss)return 0;
+    // Keep every contribution, without a ceiling on the combined reward.
+    // Score stays spectacular; money grows much more slowly. Using the round's
+    // drift total prevents splitting a slide into many chains to earn more cash.
+    const driftCash=Math.floor(5*Math.log2(1+Math.max(0,drift)/1000));
+    return Math.round((hits+wrecks*20+fatalities*10)*mult)+Math.round(bonus*.025)+(won?100:0)+driftCash;
+  },
+  format(amount){return '$'+amount.toLocaleString();},
+  livesText(){return Game.lives<=10?'♥'.repeat(Math.max(0,Game.lives)):'♥ × '+Game.lives.toLocaleString();},
+  // A host replaces this one seam and calls done only after its transaction
+  // succeeds. done(false) releases the pending guard without performing the action.
+  transact(action,done){
+    if(action.type==='upgrade'){
+      const level=Game.upgrades[action.vehicle][action.key];
+      const cost=upgradeCost(level);
+      if(level>=UPGRADE_MAX || Game.cash<cost){done(false);return;}
+      Game.cash-=cost;Game.upgrades[action.vehicle][action.key]=level+1;saveCareer();
+    }else if(action.type==='reward'){
+      if(action.life)Game.lives++;
+      Game.cash+=action.amount;saveCareer();
+    }
+    done(true);
+  },
+  pending:false,
+  request(action,proceed){
+    if(this.pending)return;
+    this.pending=true;
+    let finished=false;
+    const done=accepted=>{
+      if(finished)return;finished=true;this.pending=false;
+      if(accepted!==false)proceed();
+    };
+    try{this.transact(action,done);}catch(error){done(false);throw error;}
+  }
+};
 const POWERUP_TYPES=['repair','nitro','shield','damage'];
 const POWERUP_INFO={
   repair:{ color:0x43d17a, label:'REPAIR' }, nitro:{ color:0x3da0ff, label:'NITRO' },
@@ -3681,11 +3719,11 @@ function completeLevel(place,mult,won,title,bonus,standing){
   Game.score+=banked;
   recordChampionship();
   const freeLife = won;                                   // winning (1st place / last car running) earns a life
-  if(freeLife) Game.lives++;
   // career cash: a cut of what you banked, plus a finishing bonus -> spend it in the garage
   const raceLoss=(Game.levelType!=='derby') && !standing && mult===0;
-  const cashEarned=raceLoss?0:Math.round((banked+Game.levelDrift)*0.12)+(won?300:0)+Game.levelWrecks*40+Game.levelFatalities*60;
-  Game.cash+=cashEarned; saveCareer();
+  const cashEarned=Economy.reward({won,bonus,mult,hits:Game.levelHits,drift:Game.levelDrift,wrecks:Game.levelWrecks,fatalities:Game.levelFatalities,raceLoss});
+  Economy.request({type:'reward',amount:cashEarned,life:freeLife,
+    result:{place,won,bonus,mult,hits:Game.levelHits,drift:Game.levelDrift,wrecks:Game.levelWrecks,fatalities:Game.levelFatalities,raceLoss}},()=>refreshCashTags());
   // 4th-or-worse in a race = loss: no payout, prompt to spend a life to retry
   Game.lastBreakdown={ place,mult,won,title,earned,bonus,banked,standing,freeLife,cashEarned, drift:Game.levelDrift,
     hits:Game.levelHits,wrecks:Game.levelWrecks,fatalities:Game.levelFatalities,
@@ -3805,10 +3843,10 @@ function showWin(){
     html+=boardRow('Cars wrecked', b.wrecks+' × '+WRECK_PTS, true);
     if(b.fatalities) html+=boardRow('Fatalities 💀', b.fatalities+' × '+FATALITY_PTS, true);
     html+=boardRow('Points earned', b.earned.toLocaleString());
-    html+=boardRow(b.standing?'Payout (survived)':'Finish payout ('+ordinal(b.place)+')',
-                   (b.standing?'100%':(b.mult*100)+'%')+' → '+payout.toLocaleString());
-    if(b.bonus) html+=boardRow(b.standing?'Survivor bonus':'Podium bonus', '+'+b.bonus.toLocaleString());
-    html+=`<div class="line total"><span>Banked this level</span><span>+${b.banked.toLocaleString()}</span></div>`;
+    html+=boardRow(b.standing?'Combat score (survived)':'Combat score ('+ordinal(b.place)+')',
+                   (b.standing?'100%':(b.mult*100)+'%')+' → '+payout.toLocaleString()+' points');
+    if(b.bonus) html+=boardRow(b.standing?'Survivor score bonus':'Podium score bonus', '+'+b.bonus.toLocaleString()+' points');
+    html+=`<div class="line total"><span>Round score before drift</span><span>+${b.banked.toLocaleString()} points</span></div>`;
   }else{
     $('winTitle').textContent='LEVEL CLEARED'; $('winTitle').className='title winColor';
     $('winSub').textContent='Last one running';
@@ -3816,11 +3854,11 @@ function showWin(){
     html+=boardRow('Cars wrecked', b.wrecks+' × '+WRECK_PTS, true);
     if(b.fatalities) html+=boardRow('Fatalities 💀', b.fatalities+' × '+FATALITY_PTS, true);
     html+=boardRow('Points earned', b.earned.toLocaleString());
-    html+=boardRow('Survivor bonus', '+'+b.bonus.toLocaleString());
-    html+=`<div class="line total"><span>Banked this level</span><span>+${b.banked.toLocaleString()}</span></div>`;
+    html+=boardRow('Survivor score bonus', '+'+b.bonus.toLocaleString()+' points');
+    html+=`<div class="line total"><span>Round score before drift</span><span>+${b.banked.toLocaleString()} points</span></div>`;
   }
   if(b.drift) html+=`<div class="line"><span class="dim">Drift points 🏁</span><span style="color:#ffb869">+${b.drift.toLocaleString()}</span></div>`;
-  if(b.cashEarned) html+=`<div class="line"><span class="dim">Garage cash earned</span><span style="color:var(--gold)">+$${b.cashEarned.toLocaleString()}</span></div>`;
+  if(b.cashEarned) html+=`<div class="line" data-career-reward><span class="dim">Cash reward</span><span style="color:var(--gold)">+${Economy.format(b.cashEarned)}</span></div>`;
   html+=`<div class="line" style="margin-top:8px"><span class="dim">Total score</span><span style="color:var(--gold)">${Game.score.toLocaleString()}</span></div>`;
   html+=championshipRows(); $('winBoard').innerHTML=html; refreshCashTags(); buildWinVehChips(); showOverlay('winScreen'); hud(false);
 }
@@ -3837,7 +3875,7 @@ function showLose(){
   if(raceLoss){
     $('loseTitle').textContent=canContinue?'RACE LOST':'GAME OVER';
     $('loseSub').textContent=canContinue?'Spend a life to continue':'Out of lives — head home to run it back';
-    $('retryBtn').textContent='CONTINUE · '+'♥'.repeat(Game.lives);
+    $('retryBtn').textContent='CONTINUE · '+Economy.livesText();
     $('loseBoard').innerHTML=
       boardRow('Finish position',ordinal(bd.place),true)+
       timingRows(bd.timing)+
@@ -3847,10 +3885,10 @@ function showLose(){
   }else{
     $('loseTitle').textContent=canContinue?(Game.player.eliminated?'ELIMINATED':'WRECKED'):'GAME OVER';
     $('loseSub').textContent=canContinue?'Spend a life to continue':'Out of lives — head home to run it back';
-    $('retryBtn').textContent='CONTINUE · '+'♥'.repeat(Game.lives);
+    $('retryBtn').textContent='CONTINUE · '+Economy.livesText();
     $('loseBoard').innerHTML=
       boardRow('Round reached','#'+Game.round,true)+
-      boardRow('Lives left',canContinue?('♥'.repeat(Game.lives)):'0',true)+
+      boardRow('Lives left',canContinue?Economy.livesText():'0',true)+
       (Game.levelType!=='derby'?timingRows(raceTiming()):'')+
       `<div class="line total"><span>Score</span><span>${Game.score.toLocaleString()}</span></div>`+championshipRows();
   }
@@ -3863,7 +3901,7 @@ function updateHUD(){
   const bar=$('healthBar'); bar.style.width=hf+'%';
   bar.style.background = hf>55?'linear-gradient(90deg,#43d17a,#b6e34a)':hf>25?'linear-gradient(90deg,#ffb13b,#ffd23f)':'linear-gradient(90deg,#ff3b3b,#ff7b29)';
   $('score').textContent=Game.score.toLocaleString();
-  $('livesVal').textContent='♥'.repeat(Math.max(0,Game.lives))||'—';
+  $('livesVal').textContent=Economy.livesText()||'—';
   $('hits').textContent=Game.levelHits;
   if(Game.levelType!=='derby'){
     const place=playerPlace(), field=Game.cars.filter(c=>!c.isTow).length;   // don't count the tow truck in the field
@@ -4155,8 +4193,12 @@ async function requestLandscape(){
 }
 
 // hide the overlay immediately for instant feedback, then build the (slow) level on the next frame
-function go(r,fresh=false){
+function go(r,fresh=false,spendLife=false){
   if(Game.state==='loading') return;   // debounce: ignore a second click while a level is already being built
+  Economy.request({type:'race',round:r,fresh,spendLife},()=>beginRound(r,fresh,spendLife));
+}
+function beginRound(r,fresh=false,spendLife=false){
+  if(spendLife)Game.lives--;
   if(fresh){ Game.score=0; Game.lives=3; Game.championship={rounds:0,points:{}}; }
   // IMMEDIATELY cover the scene with the "GENERATING LEVEL" screen and cut the motor, THEN build on a later
   // frame. The level build is synchronous and can take a moment; deferring it past a paint means the loading
@@ -4246,7 +4288,7 @@ function buildDiffChips(){
       for(const c of wrap.children) c.classList.toggle('selected', c.dataset.k===key); });
     wrap.appendChild(b); }
 }
-function refreshCashTags(){ $('startCash').textContent='$'+Game.cash.toLocaleString(); if($('garageCash')) $('garageCash').textContent='$'+Game.cash.toLocaleString(); }
+function refreshCashTags(){ $('startCash').textContent=Economy.format(Game.cash); if($('garageCash')) $('garageCash').textContent=Economy.format(Game.cash); }
 function refreshEventUI(){
   const derby=Game.arenaChoice==='derby';
   for(const option of $('arenaSelect').children)option.disabled=Game.raceFormat==='trial'&&['tour','derby'].includes(option.value);
@@ -4295,13 +4337,14 @@ function renderGarage(){
     let pips=''; for(let i=0;i<UPGRADE_MAX;i++) pips+=`<div class="pip${i<lvl?' on':''}"></div>`;
     const maxed=lvl>=UPGRADE_MAX; const afford=Game.cash>=cost;
     row.innerHTML=`<div class="info"><div class="nm">${upg.label}</div><div class="ds">${upg.desc}</div><div class="pips">${pips}</div></div>`+
-      `<button class="buyBtn ${maxed?'maxed':(afford?'':'disabled')}" data-k="${upg.key}">${maxed?'MAX':'$'+cost.toLocaleString()}</button>`;
+      `<button class="buyBtn ${maxed?'maxed':(afford?'':'disabled')}" data-k="${upg.key}">${maxed?'MAX':Economy.format(cost)}</button>`;
     body.appendChild(row);
   }
   for(const btn of body.querySelectorAll('.buyBtn')){ btn.addEventListener('click',()=>{
     const vk=Game.playerVehicle; const uv=Game.upgrades[vk]||{};
     const key=btn.dataset.k; const lvl=uv[key]|0; if(lvl>=UPGRADE_MAX) return; const cost=upgradeCost(lvl);
-    if(Game.cash<cost) return; Game.cash-=cost; uv[key]=lvl+1; Game.upgrades[vk]=uv; saveCareer(); audio.powerup('repair'); renderGarage();
+    if(Game.cash<cost) return;
+    Economy.request({type:'upgrade',vehicle:vk,key},()=>{audio.powerup('repair');renderGarage();});
   }); }
 }
 function openGarage(returnTo){ Game._garageReturn=returnTo; renderGarage(); showOverlay('garageScreen'); }
@@ -4331,7 +4374,7 @@ $('nextBtn').addEventListener('click',()=>{ go(Game.eventType==='trial'?Game.rou
 $('retryBtn').addEventListener('click',()=>{
   if(Game.eventType==='trial'){if(Game.state!=='loading')go(Game.round);return;}
   if(Game.state==='loading'||Game.lives<=0) return;
-  Game.lives--; go(Game.round);   // spent lives stay spent, including retries of round one
+  go(Game.round,false,true);   // spend the life only after admission succeeds
 });
 $('resumeBtn').addEventListener('click',togglePause);
 
